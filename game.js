@@ -46,6 +46,7 @@ class BootScene extends Phaser.Scene {
     drawTurtle(this);
     drawHedgehog(this);
     drawCapybara(this);
+    drawPlane(this);
     drawPotion(this);
     drawApple(this);
     drawPlatform(this);
@@ -773,6 +774,9 @@ class GameScene extends Phaser.Scene {
     this.decorList = spawnGroundDecor(this);
     this._windTime = 0;
 
+    // Самолёт — ~3 раза за уровень
+    this.spawnPlaneFlights();
+
     // Первая капибара через 5 сек, потом каждые 8-14 сек
     this.scheduleCapybara(5000);
 
@@ -861,6 +865,47 @@ class GameScene extends Phaser.Scene {
       alpha: 1,
       duration: 10000,
       ease: 'Sine.easeInOut'
+    });
+  }
+
+  spawnPlaneFlights() {
+    // 3 пролёта — случайно в первой, второй и третьей трети уровня
+    const t1 = Phaser.Math.Between(20000,  80000);
+    const t2 = Phaser.Math.Between(110000, 180000);
+    const t3 = Phaser.Math.Between(210000, 275000);
+    [t1, t2, t3].forEach(delay => {
+      this.time.delayedCall(delay, () => {
+        if (!this.levelOver) this.flyPlane();
+      });
+    });
+  }
+
+  flyPlane() {
+    const fromLeft = Phaser.Math.RND.frac() > 0.5;
+    const y        = Phaser.Math.Between(30, 100);
+    const startX   = fromLeft ? -110 : GAME_W + 110;
+    const endX     = fromLeft ? GAME_W + 110 : -110;
+    const duration = Phaser.Math.Between(6000, 10000);
+
+    const plane = this.add.image(startX, y, 'plane')
+      .setScrollFactor(0).setDepth(0).setFlipX(!fromLeft);
+
+    // Инверсионный след — маленькие белые точки
+    const trail = this.time.addEvent({
+      delay: 180, loop: true,
+      callback: () => {
+        if (!plane.active) { trail.remove(); return; }
+        const dot = this.add.graphics().setScrollFactor(0).setDepth(-1);
+        dot.fillStyle(0xffffff, 0.55);
+        dot.fillEllipse(plane.x + (fromLeft ? -30 : 30), plane.y, 14, 5);
+        this.tweens.add({ targets: dot, alpha: 0, duration: 2200,
+          onComplete: () => dot.destroy() });
+      }
+    });
+
+    this.tweens.add({
+      targets: plane, x: endX, duration, ease: 'Linear',
+      onComplete: () => { trail.remove(); plane.destroy(); }
     });
   }
 
@@ -1608,6 +1653,62 @@ function drawHedgehog(scene) {
   g.fillRoundedRect(25, 28, 6, 7, 2);
 
   g.generateTexture('hedgehog', 38, 36);
+  g.destroy();
+}
+
+function drawPlane(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+
+  // Крыло (рисуем первым — под фюзеляжем)
+  g.fillStyle(0xdde0ee);
+  g.fillPoints([
+    {x:36,y:19},{x:54,y:19},{x:66,y:40},{x:16,y:40}
+  ], true);
+
+  // Горизонтальное оперение (хвост)
+  g.fillStyle(0xdde0ee);
+  g.fillPoints([
+    {x:4,y:20},{x:19,y:20},{x:21,y:29},{x:3,y:29}
+  ], true);
+
+  // Фюзеляж
+  g.fillStyle(0xf5f6ff);
+  g.fillEllipse(47, 20, 86, 24);
+
+  // Нос (острый, вправо)
+  g.fillStyle(0xeceef8);
+  g.fillTriangle(86, 13, 96, 20, 86, 27);
+
+  // Вертикальный киль
+  g.fillStyle(0xdde0ee);
+  g.fillPoints([
+    {x:5,y:19},{x:17,y:19},{x:15,y:5},{x:7,y:5}
+  ], true);
+
+  // Цветная полоса по борту
+  g.fillStyle(0x3399ff);
+  g.fillRect(14, 16, 72, 6);
+
+  // Иллюминаторы
+  g.fillStyle(0xbbddff);
+  [28, 42, 56, 70].forEach(x => {
+    g.fillRoundedRect(x, 10, 10, 9, 3);
+    g.fillStyle(0x88ccff);
+    g.fillRoundedRect(x + 2, 11, 5, 5, 2);
+    g.fillStyle(0xbbddff);
+  });
+
+  // Двигатель под крылом
+  g.fillStyle(0xcccedc);
+  g.fillRoundedRect(36, 36, 22, 9, 3);
+  g.fillStyle(0xaaaacc);
+  g.fillCircle(36, 40, 4);
+
+  // Контур фюзеляжа
+  g.lineStyle(1, 0xbbbecc, 0.7);
+  g.strokeEllipse(47, 20, 86, 24);
+
+  g.generateTexture('plane', 98, 46);
   g.destroy();
 }
 
