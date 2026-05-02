@@ -6,6 +6,27 @@ const GAME_W = 960;
 const GAME_H = 560;
 const MAX_LEVEL = 2;
 const SPRITES = 'assets/sprites/cutout/resized/';
+const LB_KEY = 'puteshestvie_scores';
+
+function getLeaderboard() {
+  try { return JSON.parse(localStorage.getItem(LB_KEY) || '[]'); }
+  catch { return []; }
+}
+
+function saveToLeaderboard(name, score) {
+  const board = getLeaderboard();
+  board.push({ name: (name.trim() || 'Игрок'), score });
+  board.sort((a, b) => b.score - a.score);
+  board.splice(10);
+  localStorage.setItem(LB_KEY, JSON.stringify(board));
+  return board.findIndex(e => e.name === (name.trim() || 'Игрок') && e.score === score);
+}
+
+function isNewRecord(score) {
+  if (score <= 0) return false;
+  const board = getLeaderboard();
+  return board.length < 10 || score > board[board.length - 1].score;
+}
 
 // --- Сцена загрузки ---
 class BootScene extends Phaser.Scene {
@@ -114,10 +135,20 @@ class MenuScene extends Phaser.Scene {
     });
 
     // Управление
-    this.add.text(GAME_W / 2, GAME_H / 2 + 160, '⬅ ➡ — идти   ⬆ Пробел — прыжок   F — яблоко', {
-      fontSize: '14px',
-      fill: '#aaaaff'
+    this.add.text(GAME_W / 2, GAME_H / 2 + 155, '⬅ ➡ — идти   ⬆ Пробел — прыжок   F — яблоко', {
+      fontSize: '14px', fill: '#aaaaff'
     }).setOrigin(0.5);
+
+    // Кнопка рейтинга
+    const top3 = getLeaderboard().slice(0, 3);
+    if (top3.length > 0) {
+      const lbBtn = this.add.text(GAME_W / 2, GAME_H / 2 + 130, '🏆 ' + top3.map((e, i) => `${i+1}. ${e.name} — ${e.score}`).join('   '), {
+        fontSize: '14px', fill: '#FFD700', stroke: '#000', strokeThickness: 2
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      lbBtn.on('pointerdown', () => this.scene.start('Leaderboard'));
+      lbBtn.on('pointerover', () => lbBtn.setAlpha(0.7));
+      lbBtn.on('pointerout',  () => lbBtn.setAlpha(1));
+    }
 
     // Старт по любой клавише или клику
     const startGame = () => this.scene.start('Game', { level: 1, score: 0, lives: 3, apples: 5 });
@@ -345,9 +376,165 @@ class VictoryScene extends Phaser.Scene {
     }).setOrigin(0.5);
     this.tweens.add({ targets: btn, alpha: 0.2, duration: 600, yoyo: true, repeat: -1 });
 
-    const restart = () => this.scene.start('Game', { level: 1, score: 0, lives: 3, apples: 5 });
-    this.input.keyboard.once('keydown', restart);
-    this.input.once('pointerdown', restart);
+    const next = () => {
+      if (isNewRecord(this.finalScore)) {
+        this.scene.start('NameInput', { score: this.finalScore });
+      } else {
+        this.scene.start('Leaderboard', { score: this.finalScore });
+      }
+    };
+    this.input.keyboard.once('keydown', next);
+    this.input.once('pointerdown', next);
+  }
+}
+
+// --- Ввод имени при новом рекорде ---
+class NameInputScene extends Phaser.Scene {
+  constructor() { super('NameInput'); }
+
+  init(data) {
+    this.finalScore = data.score || 0;
+  }
+
+  create() {
+    this.add.image(GAME_W / 2, GAME_H / 2, 'background');
+    const overlay = this.add.graphics();
+    overlay.fillStyle(0x000022, 0.72);
+    overlay.fillRect(0, 0, GAME_W, GAME_H);
+
+    const frame = this.add.graphics();
+    frame.fillStyle(0x1a0a2e, 0.94);
+    frame.fillRoundedRect(GAME_W / 2 - 290, GAME_H / 2 - 170, 580, 340, 22);
+    frame.lineStyle(4, 0xFFD700, 1);
+    frame.strokeRoundedRect(GAME_W / 2 - 290, GAME_H / 2 - 170, 580, 340, 22);
+
+    this.add.text(GAME_W / 2, GAME_H / 2 - 130, '🏆 Новый рекорд!', {
+      fontSize: '38px', fill: '#FFD700', stroke: '#000', strokeThickness: 5, fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    this.add.text(GAME_W / 2, GAME_H / 2 - 70, `Твои очки: ${this.finalScore}`, {
+      fontSize: '28px', fill: '#ffffff', stroke: '#000', strokeThickness: 3
+    }).setOrigin(0.5);
+
+    this.add.text(GAME_W / 2, GAME_H / 2 - 20, 'Введи своё имя:', {
+      fontSize: '20px', fill: '#ffccff', stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5);
+
+    this._name = '';
+    this._cursor = true;
+    this._nameText = this.add.text(GAME_W / 2, GAME_H / 2 + 30, '|', {
+      fontSize: '30px', fill: '#ffff88', stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    this.time.addEvent({
+      delay: 500, loop: true,
+      callback: () => { this._cursor = !this._cursor; this._refresh(); }
+    });
+
+    this.add.text(GAME_W / 2, GAME_H / 2 + 105, 'Enter — сохранить', {
+      fontSize: '18px', fill: '#aaaaff', stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5);
+
+    this.input.keyboard.on('keydown', e => {
+      if (e.key === 'Enter') {
+        this._submit();
+      } else if (e.key === 'Backspace') {
+        this._name = this._name.slice(0, -1);
+        this._refresh();
+      } else if (e.key.length === 1 && this._name.length < 14) {
+        this._name += e.key;
+        this._refresh();
+      }
+    });
+  }
+
+  _refresh() {
+    this._nameText.setText(this._name + (this._cursor ? '|' : ' '));
+  }
+
+  _submit() {
+    const idx = saveToLeaderboard(this._name, this.finalScore);
+    this.scene.start('Leaderboard', { highlightIdx: idx, score: this.finalScore });
+  }
+}
+
+// --- Таблица рекордов ---
+class LeaderboardScene extends Phaser.Scene {
+  constructor() { super('Leaderboard'); }
+
+  init(data) {
+    this.highlightIdx = data.highlightIdx !== undefined ? data.highlightIdx : -1;
+    this.currentScore = data.score || 0;
+  }
+
+  create() {
+    this.add.image(GAME_W / 2, GAME_H / 2, 'background');
+    const overlay = this.add.graphics();
+    overlay.fillStyle(0x000022, 0.68);
+    overlay.fillRect(0, 0, GAME_W, GAME_H);
+
+    const frame = this.add.graphics();
+    frame.fillStyle(0x1a0a2e, 0.93);
+    frame.fillRoundedRect(GAME_W / 2 - 300, 24, 600, GAME_H - 48, 22);
+    frame.lineStyle(4, 0xFFD700, 1);
+    frame.strokeRoundedRect(GAME_W / 2 - 300, 24, 600, GAME_H - 48, 22);
+
+    this.add.text(GAME_W / 2, 60, '🏆  Рейтинг', {
+      fontSize: '38px', fill: '#FFD700', stroke: '#000', strokeThickness: 5, fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    // Шапка таблицы
+    this.add.text(GAME_W / 2 - 230, 108, '#', { fontSize: '16px', fill: '#aaaaaa' }).setOrigin(0.5);
+    this.add.text(GAME_W / 2 - 90,  108, 'Имя',   { fontSize: '16px', fill: '#aaaaaa' }).setOrigin(0, 0.5);
+    this.add.text(GAME_W / 2 + 220, 108, 'Очки',  { fontSize: '16px', fill: '#aaaaaa' }).setOrigin(1, 0.5);
+    const divider = this.add.graphics();
+    divider.lineStyle(1, 0x555577, 1);
+    divider.beginPath(); divider.moveTo(GAME_W / 2 - 260, 118); divider.lineTo(GAME_W / 2 + 260, 118); divider.strokePath();
+
+    const board = getLeaderboard();
+    const medals = ['🥇', '🥈', '🥉'];
+
+    if (board.length === 0) {
+      this.add.text(GAME_W / 2, 290, 'Пока нет рекордов...', {
+        fontSize: '22px', fill: '#888899'
+      }).setOrigin(0.5);
+    }
+
+    board.forEach((entry, i) => {
+      const y = 138 + i * 38;
+      const isHl = i === this.highlightIdx;
+      const color = isHl ? '#ffff44' : (i === 0 ? '#FFD700' : i === 1 ? '#dddddd' : i === 2 ? '#cc9944' : '#cccccc');
+
+      // Подсветка строки нового рекорда
+      if (isHl) {
+        const hlRow = this.add.graphics();
+        hlRow.fillStyle(0xffaa00, 0.18);
+        hlRow.fillRoundedRect(GAME_W / 2 - 258, y - 14, 516, 30, 6);
+      }
+
+      const medal = medals[i] || `${i + 1}`;
+      this.add.text(GAME_W / 2 - 230, y, medal, { fontSize: '20px', fill: color }).setOrigin(0.5);
+
+      const nt = this.add.text(GAME_W / 2 - 190, y, entry.name, {
+        fontSize: '22px', fill: color, fontStyle: isHl ? 'bold' : 'normal'
+      }).setOrigin(0, 0.5);
+
+      this.add.text(GAME_W / 2 + 220, y, String(entry.score), {
+        fontSize: '22px', fill: color, fontStyle: 'bold'
+      }).setOrigin(1, 0.5);
+
+      if (isHl) {
+        this.tweens.add({ targets: nt, alpha: 0.35, duration: 450, yoyo: true, repeat: -1 });
+      }
+    });
+
+    const btn = this.add.text(GAME_W / 2, GAME_H - 52, '▶  Нажми любую клавишу  ◀', {
+      fontSize: '20px', fill: '#fff', stroke: '#000', strokeThickness: 3
+    }).setOrigin(0.5);
+    this.tweens.add({ targets: btn, alpha: 0.2, duration: 600, yoyo: true, repeat: -1 });
+
+    this.input.keyboard.once('keydown', () => this.scene.start('Menu'));
+    this.input.once('pointerdown',      () => this.scene.start('Menu'));
   }
 }
 
@@ -908,25 +1095,33 @@ class GameScene extends Phaser.Scene {
   gameOver() {
     this.levelOver = true;
 
-    const overlay = this.add.graphics().setScrollFactor(0);
-    overlay.fillStyle(0x000000, 0.55);
+    const overlay = this.add.graphics().setScrollFactor(0).setDepth(11);
+    overlay.fillStyle(0x000000, 0.6);
     overlay.fillRect(0, 0, GAME_W, GAME_H);
 
-    this.add.text(GAME_W / 2, GAME_H / 2 - 50, '💔 Игра окончена', {
+    this.add.text(GAME_W / 2, GAME_H / 2 - 60, '💔 Игра окончена', {
       fontSize: '40px', fill: '#ff4466', stroke: '#000', strokeThickness: 5
-    }).setOrigin(0.5).setScrollFactor(0);
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(12);
 
-    this.add.text(GAME_W / 2, GAME_H / 2 + 10, `Очки: ${this.score}`, {
-      fontSize: '26px', fill: '#fff', stroke: '#000', strokeThickness: 3
-    }).setOrigin(0.5).setScrollFactor(0);
+    this.add.text(GAME_W / 2, GAME_H / 2, `Очки: ${this.score}`, {
+      fontSize: '28px', fill: '#fff', stroke: '#000', strokeThickness: 3
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(12);
 
-    const btn = this.add.text(GAME_W / 2, GAME_H / 2 + 65, '▶  ENTER — начать заново  ◀', {
-      fontSize: '20px', fill: '#fff', stroke: '#000', strokeThickness: 3
-    }).setOrigin(0.5).setScrollFactor(0);
+    const isRecord = isNewRecord(this.score);
+    const hint = isRecord ? '🏆 Новый рекорд! Нажми любую клавишу' : '▶  Нажми любую клавишу  ◀';
+    const hintColor = isRecord ? '#FFD700' : '#ffffff';
+
+    const btn = this.add.text(GAME_W / 2, GAME_H / 2 + 65, hint, {
+      fontSize: '20px', fill: hintColor, stroke: '#000', strokeThickness: 3
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(12);
     this.tweens.add({ targets: btn, alpha: 0.2, duration: 600, yoyo: true, repeat: -1 });
 
     this.input.keyboard.once('keydown', () => {
-      this.scene.start('Game', { level: 1, score: 0, lives: 3, apples: 5 });
+      if (isNewRecord(this.score)) {
+        this.scene.start('NameInput', { score: this.score });
+      } else {
+        this.scene.start('Leaderboard', { score: this.score });
+      }
     });
   }
 
@@ -1597,7 +1792,7 @@ const config = {
     default: 'arcade',
     arcade: { gravity: { y: 600 }, debug: false }
   },
-  scene: [BootScene, MenuScene, GameScene, LevelCompleteScene, VictoryScene]
+  scene: [BootScene, MenuScene, GameScene, LevelCompleteScene, VictoryScene, NameInputScene, LeaderboardScene]
 };
 
 const game = new Phaser.Game(config);
