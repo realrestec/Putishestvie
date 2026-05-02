@@ -203,12 +203,10 @@ function generateLevelData(levelNum) {
     if (!clash) platforms.push({ x, y });
   }
 
-  // Moving platform
-  const mpY      = rInt(125, 170);
-  const mpRange  = rInt(160, 260);
-  const mpCenter = rInt(200, GAME_W - 200);
-  const mpMinX   = Math.max(60, mpCenter - Math.floor(mpRange / 2));
-  const mpMaxX   = Math.min(GAME_W - 60, mpCenter + Math.floor(mpRange / 2));
+  // Moving platform — full width, random height
+  const mpY    = rInt(110, GAME_H - 140);
+  const mpMinX = 60;
+  const mpMaxX = GAME_W - 60;
 
   // Enemy slots: ground + top of platforms
   const groundSlots = [130, 270, 410, 540, 670, 800]
@@ -232,7 +230,7 @@ function generateLevelData(levelNum) {
     turtles,
     hedgehogs,
     movingPlatform: {
-      x: Math.round((mpMinX + mpMaxX) / 2),
+      x: mpMinX,
       y: mpY,
       minX: mpMinX,
       maxX: mpMaxX,
@@ -615,10 +613,11 @@ class GameScene extends Phaser.Scene {
     const mpd = levelData.movingPlatform;
     this.movingPlatform = this.physics.add.staticImage(mpd.x, mpd.y, 'platform');
     this.movingPlatform.setTint(0xffdd88);
-    this.movingPlatform._minX  = mpd.minX;
-    this.movingPlatform._maxX  = mpd.maxX;
-    this.movingPlatform._speed = mpd.speed;
-    this.movingPlatform._dir   = 1;   // 1 = вправо, -1 = влево
+    this.movingPlatform._minX     = mpd.minX;
+    this.movingPlatform._maxX     = mpd.maxX;
+    this.movingPlatform._speed    = mpd.speed;
+    this.movingPlatform._dir      = 1;
+    this.movingPlatform._changing = false;
 
     // Девочка
     this.girl = this.physics.add.sprite(100, GAME_H - 100, 'girl_idle');
@@ -1195,12 +1194,33 @@ class GameScene extends Phaser.Scene {
     const sz = this.girlSize === 'small' ? 0.6 : 1.0;
     this.girl.setScale(sz, sz);
 
-    // Движущаяся платформа — двигаем вручную, refreshBody() обновляет коллайдер
+    // Движущаяся платформа — двигаем вручную, при смене направления меняет высоту
     const mp = this.movingPlatform;
     const mpVel = mp._speed * mp._dir;
     mp.x += mpVel * dt;
-    if (mp.x >= mp._maxX) { mp.x = mp._maxX; mp._dir = -1; }
-    if (mp.x <= mp._minX) { mp.x = mp._minX; mp._dir =  1; }
+
+    const hitRight = mp.x >= mp._maxX;
+    const hitLeft  = mp.x <= mp._minX;
+    if ((hitRight || hitLeft) && !mp._changing) {
+      mp.x = hitRight ? mp._maxX : mp._minX;
+      mp._dir *= -1;
+      mp._changing = true;
+      const newY = Phaser.Math.Between(110, GAME_H - 140);
+      this.tweens.add({
+        targets: mp,
+        y: newY,
+        duration: 600,
+        ease: 'Sine.easeInOut',
+        onUpdate: () => mp.refreshBody(),
+        onComplete: () => { mp._changing = false; }
+      });
+      // Краткое свечение платформы
+      this.tweens.add({
+        targets: mp, alpha: 0.4,
+        duration: 150, yoyo: true, repeat: 2,
+        onComplete: () => mp.setAlpha(1)
+      });
+    }
     mp.refreshBody();
 
     // Перевозим игрока: используем физические границы тел
