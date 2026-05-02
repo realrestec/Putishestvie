@@ -74,81 +74,74 @@ class MenuScene extends Phaser.Scene {
     overlay.fillStyle(0x000000, 0.35);
     overlay.fillRect(0, 0, GAME_W, GAME_H);
 
-    // Рамка
+    // Рамка — чуть выше и шире чтобы вместить весь контент
     const frame = this.add.graphics();
+    frame.fillStyle(0x1a0a2e, 0.80);
+    frame.fillRoundedRect(GAME_W / 2 - 270, GAME_H / 2 - 195, 540, 390, 22);
     frame.lineStyle(4, 0xFFD700, 1);
-    frame.strokeRoundedRect(GAME_W / 2 - 260, GAME_H / 2 - 160, 520, 320, 20);
-    frame.fillStyle(0x1a0a2e, 0.75);
-    frame.fillRoundedRect(GAME_W / 2 - 260, GAME_H / 2 - 160, 520, 320, 20);
+    frame.strokeRoundedRect(GAME_W / 2 - 270, GAME_H / 2 - 195, 540, 390, 22);
 
     // Звёздочки вокруг названия
-    const stars = ['✨', '⭐', '🌟', '✨', '⭐'];
-    stars.forEach((s, i) => {
-      this.add.text(GAME_W / 2 - 200 + i * 100, GAME_H / 2 - 130, s, {
+    ['✨', '⭐', '🌟', '✨', '⭐'].forEach((s, i) => {
+      this.add.text(GAME_W / 2 - 200 + i * 100, GAME_H / 2 - 162, s, {
         fontSize: '22px'
       }).setOrigin(0.5);
     });
 
     // Название игры
-    this.add.text(GAME_W / 2, GAME_H / 2 - 80, 'Путешествие', {
-      fontSize: '62px',
-      fill: '#FFD700',
-      stroke: '#8B0000',
-      strokeThickness: 6,
-      fontStyle: 'bold',
+    this.add.text(GAME_W / 2, GAME_H / 2 - 105, 'Путешествие', {
+      fontSize: '60px', fill: '#FFD700',
+      stroke: '#8B0000', strokeThickness: 6, fontStyle: 'bold',
       shadow: { offsetX: 3, offsetY: 3, color: '#000', blur: 8, fill: true }
     }).setOrigin(0.5);
 
     // Подзаголовок
-    this.add.text(GAME_W / 2, GAME_H / 2 - 10, '— сказочное приключение —', {
-      fontSize: '20px',
-      fill: '#ffccff',
-      fontStyle: 'italic'
+    this.add.text(GAME_W / 2, GAME_H / 2 - 42, '— сказочное приключение —', {
+      fontSize: '20px', fill: '#ffccff', fontStyle: 'italic'
     }).setOrigin(0.5);
 
-    // Персонаж на экране меню
-    const girl = this.add.image(GAME_W / 2 + 170, GAME_H / 2 + 20, 'girl_menu');
-    girl.setScale(0.9);
-    this.tweens.add({
-      targets: girl,
-      y: GAME_H / 2 + 48,
-      duration: 900,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut'
-    });
+    // Персонаж
+    const girl = this.add.image(GAME_W / 2 + 178, GAME_H / 2 + 40, 'girl_menu').setScale(0.85);
+    this.tweens.add({ targets: girl, y: girl.y + 22, duration: 900, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+
+    // Разделитель
+    const div = this.add.graphics();
+    div.lineStyle(1, 0x9966cc, 0.6);
+    div.beginPath();
+    div.moveTo(GAME_W / 2 - 200, GAME_H / 2 - 10);
+    div.lineTo(GAME_W / 2 + 200, GAME_H / 2 - 10);
+    div.strokePath();
+
+    // Лучший результат (если есть)
+    const top1 = getLeaderboard()[0];
+    if (top1) {
+      const lbBtn = this.add.text(GAME_W / 2, GAME_H / 2 + 20,
+        `🏆  Рекорд: ${top1.name} — ${top1.score} очков`, {
+        fontSize: '17px', fill: '#FFD700', stroke: '#000', strokeThickness: 2
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+      lbBtn.on('pointerdown', () => this.scene.start('Leaderboard'));
+      lbBtn.on('pointerover', () => lbBtn.setStyle({ fill: '#ffffaa' }));
+      lbBtn.on('pointerout',  () => lbBtn.setStyle({ fill: '#FFD700' }));
+    }
 
     // Кнопка старта (мигающая)
-    const startText = this.add.text(GAME_W / 2, GAME_H / 2 + 120, '▶  Нажми любую клавишу  ◀', {
-      fontSize: '22px',
-      fill: '#ffffff',
-      stroke: '#000000',
-      strokeThickness: 3
+    const startText = this.add.text(GAME_W / 2, GAME_H / 2 + 80, '▶  Нажми любую клавишу  ◀', {
+      fontSize: '22px', fill: '#ffffff', stroke: '#000000', strokeThickness: 3
     }).setOrigin(0.5);
-
-    this.tweens.add({
-      targets: startText,
-      alpha: 0.2,
-      duration: 700,
-      yoyo: true,
-      repeat: -1
-    });
+    this.tweens.add({ targets: startText, alpha: 0.2, duration: 700, yoyo: true, repeat: -1 });
 
     // Управление
-    this.add.text(GAME_W / 2, GAME_H / 2 + 155, '⬅ ➡ — идти   ⬆ Пробел — прыжок   F — яблоко', {
+    this.add.text(GAME_W / 2, GAME_H / 2 + 130, '⬅ ➡ — идти   ⬆ Пробел — прыжок   F — яблоко', {
       fontSize: '14px', fill: '#aaaaff'
     }).setOrigin(0.5);
 
     // Кнопка рейтинга
-    const top3 = getLeaderboard().slice(0, 3);
-    if (top3.length > 0) {
-      const lbBtn = this.add.text(GAME_W / 2, GAME_H / 2 + 130, '🏆 ' + top3.map((e, i) => `${i+1}. ${e.name} — ${e.score}`).join('   '), {
-        fontSize: '14px', fill: '#FFD700', stroke: '#000', strokeThickness: 2
-      }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-      lbBtn.on('pointerdown', () => this.scene.start('Leaderboard'));
-      lbBtn.on('pointerover', () => lbBtn.setAlpha(0.7));
-      lbBtn.on('pointerout',  () => lbBtn.setAlpha(1));
-    }
+    this.add.text(GAME_W / 2, GAME_H / 2 + 168, '[ посмотреть весь рейтинг ]', {
+      fontSize: '13px', fill: '#cc99ff', stroke: '#000', strokeThickness: 1
+    }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.scene.start('Leaderboard'))
+      .on('pointerover', function() { this.setAlpha(0.7); })
+      .on('pointerout',  function() { this.setAlpha(1); });
 
     // Старт по любой клавише или клику
     const startGame = () => this.scene.start('Game', { level: 1, score: 0, lives: 3, apples: 5 });
