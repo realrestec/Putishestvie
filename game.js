@@ -878,6 +878,9 @@ class GameScene extends Phaser.Scene {
       this.decorList = spawnBeachDecor(this);
       this.startSupBoarder();
       this.scheduleFishJump(30000);
+      SoundFX.startBeachAmbient();
+      SoundFX.startBeachMusic();
+      SoundFX.startSeagulls();
     } else {
       this.decorList = spawnGroundDecor(this);
     }
@@ -1229,6 +1232,7 @@ class GameScene extends Phaser.Scene {
     if (capy._walkTimer) capy._walkTimer.remove();
     capy.destroy();
 
+    SoundFX.bonus();
     this.score += 20;
     this.scoreText.setText('Очки: ' + this.score);
 
@@ -1253,6 +1257,7 @@ class GameScene extends Phaser.Scene {
     this.score += 10;
     this.scoreText.setText('Очки: ' + this.score);
 
+    SoundFX.hitFX();
     const boom = this.add.text(enemy.x, enemy.y - 20, '✨+10', {
       fontSize: '18px', fill: '#ffff00', stroke: '#000', strokeThickness: 2
     });
@@ -1322,6 +1327,7 @@ class GameScene extends Phaser.Scene {
   }
 
   finishLevel() {
+    SoundFX.stopAll();
     const maxLevel = MAX_LEVEL;
     if (this.currentLevel >= maxLevel) {
       this.scene.start('Victory', { score: this.score });
@@ -1358,6 +1364,7 @@ class GameScene extends Phaser.Scene {
     this.apples--;
     this.throwCooldown = 400;
     this.applesText.setText('🍎 x ' + this.apples);
+    SoundFX.throwFX();
 
     // Поза броска на 400 мс
     this.girl.setTexture('girl_fire');
@@ -1380,6 +1387,7 @@ class GameScene extends Phaser.Scene {
 
   gameOver() {
     this.levelOver = true;
+    SoundFX.stopAll();
 
     const overlay = this.add.graphics().setScrollFactor(0).setDepth(11);
     overlay.fillStyle(0x000000, 0.6);
@@ -1459,6 +1467,7 @@ class GameScene extends Phaser.Scene {
 
     if ((this.cursors.up.isDown || this.cursors.space.isDown) && onGround) {
       this.girl.setVelocityY(-520);
+      SoundFX.jump();
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.throwKey)) {
@@ -2460,6 +2469,179 @@ function spawnBeachDecor(scene) {
 
   return decorItems;
 }
+
+// ============================
+//  ЗВУКОВЫЕ ЭФФЕКТЫ (Web Audio API)
+// ============================
+const SoundFX = (() => {
+  let _ctx = null, _master = null;
+  let _ambientSrc = null, _ambientLfo = null;
+  let _musicId    = null;
+  let _seagullId  = null;
+
+  function ac() {
+    if (!_ctx) {
+      _ctx = new (window.AudioContext || window.webkitAudioContext)();
+      _master = _ctx.createGain();
+      _master.gain.value = 0.6;
+      _master.connect(_ctx.destination);
+    }
+    if (_ctx.state === 'suspended') _ctx.resume().catch(() => {});
+    return _ctx;
+  }
+
+  function tone(freq, type, dur, vol, when = 0, freqTo) {
+    const c = ac(), now = c.currentTime + when;
+    const osc = c.createOscillator(), g = c.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, now);
+    if (freqTo) osc.frequency.exponentialRampToValueAtTime(Math.max(freqTo, 10), now + dur);
+    g.gain.setValueAtTime(vol, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    osc.connect(g); g.connect(_master);
+    osc.start(now); osc.stop(now + dur + 0.05);
+  }
+
+  function noise(dur, bandFreq, Q, vol, when = 0) {
+    const c = ac(), now = c.currentTime + when;
+    const sz = Math.ceil(c.sampleRate * (dur + 0.1));
+    const buf = c.createBuffer(1, sz, c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < sz; i++) d[i] = Math.random() * 2 - 1;
+    const src = c.createBufferSource(); src.buffer = buf;
+    const f = c.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = bandFreq; f.Q.value = Q;
+    const g = c.createGain();
+    g.gain.setValueAtTime(vol, now);
+    g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+    src.connect(f); f.connect(g); g.connect(_master);
+    src.start(now); src.stop(now + dur + 0.1);
+  }
+
+  const sfx = {
+    // --- Прыжок ---
+    jump() {
+      tone(190, 'sine', 0.16, 0.28, 0, 510);
+      noise(0.06, 650, 2, 0.07, 0.01);
+    },
+
+    // --- Сбор бонуса (морская звезда / капибара) ---
+    bonus() {
+      tone(523,  'sine', 0.28, 0.26, 0.00);
+      tone(659,  'sine', 0.28, 0.26, 0.09);
+      tone(784,  'sine', 0.32, 0.28, 0.18);
+      tone(1047, 'sine', 0.28, 0.16, 0.29);
+    },
+
+    // --- Бросок яблока ---
+    throwFX() {
+      noise(0.16, 1900, 3, 0.30, 0);
+      tone(380, 'sawtooth', 0.14, 0.08, 0, 95);
+    },
+
+    // --- Попадание яблоком во врага ---
+    hitFX() {
+      noise(0.11, 520, 1.5, 0.38, 0);
+      tone(72, 'sine', 0.18, 0.42, 0, 38);
+    },
+
+    // --- Фоновый шум волн ---
+    startBeachAmbient() {
+      if (_ambientSrc) return;
+      const c = ac();
+      const sec = 12, sz = Math.ceil(c.sampleRate * sec);
+      const buf = c.createBuffer(1, sz, c.sampleRate);
+      const d   = buf.getChannelData(0);
+      for (let i = 0; i < sz; i++) d[i] = Math.random() * 2 - 1;
+      _ambientSrc = c.createBufferSource();
+      _ambientSrc.buffer = buf; _ambientSrc.loop = true;
+
+      const lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 320;
+      _ambientLfo = c.createOscillator();
+      const lg = c.createGain(); _ambientLfo.frequency.value = 0.09; lg.gain.value = 240;
+      _ambientLfo.connect(lg); lg.connect(lp.frequency);
+
+      const wg = c.createGain(); wg.gain.value = 0.13;
+      _ambientSrc.connect(lp); lp.connect(wg); wg.connect(_master);
+      _ambientLfo.start(); _ambientSrc.start();
+    },
+
+    stopBeachAmbient() {
+      try { if (_ambientSrc) _ambientSrc.stop(); } catch (e) {}
+      try { if (_ambientLfo) _ambientLfo.stop(); } catch (e) {}
+      _ambientSrc = _ambientLfo = null;
+    },
+
+    // --- Чайка ---
+    seagull() {
+      const c = ac();
+      const calls = Math.random() > 0.45 ? 2 : 1;
+      for (let k = 0; k < calls; k++) {
+        const now = c.currentTime + k * 0.52;
+        const osc = c.createOscillator(), mod = c.createOscillator();
+        const mg = c.createGain(), g = c.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(1100, now);
+        osc.frequency.exponentialRampToValueAtTime(670, now + 0.30);
+        mod.frequency.value = 6; mg.gain.value = 65;
+        mod.connect(mg); mg.connect(osc.frequency);
+        g.gain.setValueAtTime(0.001, now);
+        g.gain.linearRampToValueAtTime(0.11, now + 0.05);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.32);
+        osc.connect(g); g.connect(_master);
+        mod.start(now); osc.start(now);
+        mod.stop(now + 0.36); osc.stop(now + 0.36);
+      }
+    },
+
+    startSeagulls() {
+      const sched = () => {
+        sfx.seagull();
+        _seagullId = setTimeout(sched, 9000 + Math.random() * 17000);
+      };
+      _seagullId = setTimeout(sched, 5000 + Math.random() * 7000);
+    },
+
+    stopSeagulls() {
+      if (_seagullId !== null) { clearTimeout(_seagullId); _seagullId = null; }
+    },
+
+    // --- Тропическая фоновая музыка ---
+    startBeachMusic() {
+      if (_musicId !== null) return;
+      // C мажорная пентатоника: C4 E4 G4 A4 C5 E5 G5
+      const N = [262, 330, 392, 440, 523, 659, 784];
+      // Жизнерадостный тропический арпеджио
+      const P = [0,2,4,2, 5,4,2,0, 1,3,4,3, 6,4,3,1,
+                 0,4,2,4, 5,2,4,5, 1,3,5,3, 4,2,0,2];
+      let step = 0;
+      const MS = (60 / 114) * 500; // 114 BPM, восьмые ноты ~263ms
+
+      const tick = () => {
+        const freq = N[P[step % P.length]];
+        tone(freq, 'triangle', 0.38, 0.09);
+        // Бас на каждую долю (каждые 2 шага)
+        if (step % 2 === 0) tone(N[step % 16 < 8 ? 0 : 1] * 0.5, 'sine', 0.55, 0.06);
+        // Гармония каждые 4 шага
+        if (step % 4 === 2) tone(freq * 1.498, 'sine', 0.30, 0.035);
+        step++;
+      };
+      tick();
+      _musicId = setInterval(tick, MS);
+    },
+
+    stopBeachMusic() {
+      if (_musicId !== null) { clearInterval(_musicId); _musicId = null; }
+    },
+
+    stopAll() {
+      sfx.stopBeachAmbient();
+      sfx.stopBeachMusic();
+      sfx.stopSeagulls();
+    }
+  };
+
+  return sfx;
+})();
 
 // ============================
 //  Запуск игры
