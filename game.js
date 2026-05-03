@@ -724,11 +724,6 @@ class GameScene extends Phaser.Scene {
     // Движущаяся платформа — статическое тело, позиция обновляется вручную
     const mpd = levelData.movingPlatform;
     this.movingPlatform = this.physics.add.staticImage(mpd.x, mpd.y, platKey);
-    this.movingPlatform.setTint(isBeach ? 0x44AAFF : 0xFF9900);
-    // Стрелочки-подсказка чтобы отличать движущуюся от статичных
-    this._mpArrow = this.add.text(mpd.x, mpd.y, '◀ ▶', {
-      fontSize: '13px', fill: '#ffffff', stroke: '#000', strokeThickness: 2
-    }).setOrigin(0.5).setDepth(1);
     this.movingPlatform._minX     = mpd.minX;
     this.movingPlatform._maxX     = mpd.maxX;
     this.movingPlatform._speed    = mpd.speed;
@@ -1704,7 +1699,6 @@ class GameScene extends Phaser.Scene {
       });
     }
     mp.refreshBody();
-    if (this._mpArrow) this._mpArrow.x = mp.x;
 
     // Перевозим игрока: используем физические границы тел
     const onTop = this.girl.body.blocked.down
