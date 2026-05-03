@@ -55,6 +55,7 @@ class BootScene extends Phaser.Scene {
     drawShell(this);
     drawStarfishBonus(this);
     drawCrab(this);
+    drawCrabB(this);
     drawBeachUmbrella(this);
     drawSupBoard(this);
     drawJumpingFish(this);
@@ -653,13 +654,26 @@ class GameScene extends Phaser.Scene {
     const gndKey  = isBeach ? 'beach_ground'   : 'ground';
     const platKey = isBeach ? 'beach_platform' : 'platform';
 
-    // Фон
-    this.add.image(GAME_W / 2, GAME_H / 2, bgKey);
+    // Анимация ходьбы краба (два кадра)
+    if (isBeach && !this.anims.exists('crab_walk')) {
+      this.anims.create({
+        key: 'crab_walk',
+        frames: [{ key: 'crab' }, { key: 'crab_b' }],
+        frameRate: 7,
+        repeat: -1
+      });
+    }
 
-    // === Ночная тема (активируется в середине уровня) ===
-    // Тёмный оверлей
-    this.nightOverlay = this.add.graphics().setScrollFactor(0).setDepth(5).setAlpha(0);
-    this.nightOverlay.fillStyle(0x05021a, 1);
+    // Фон (depth -2 — под оверлеем заката/ночи)
+    this.bgImage = this.add.image(GAME_W / 2, GAME_H / 2, bgKey).setDepth(-2);
+
+    // === Ночная тема / закат (активируется в середине уровня) ===
+    // Пляж: оверлей за игровыми объектами (depth -1), тёплый закат
+    // Лес:  оверлей поверх всего (depth 5), полная тьма
+    const overlayDepth = isBeach ? -1 : 5;
+    const overlayColor = isBeach ? 0xCC4400 : 0x05021a;
+    this.nightOverlay = this.add.graphics().setScrollFactor(0).setDepth(overlayDepth).setAlpha(0);
+    this.nightOverlay.fillStyle(overlayColor, 1);
     this.nightOverlay.fillRect(0, 0, GAME_W, GAME_H);
 
     // Звёзды — рисуем заранее, показываем с ночью
@@ -734,6 +748,7 @@ class GameScene extends Phaser.Scene {
       t.setVelocityX(Phaser.Math.RND.pick([-this.turtleSpeed, this.turtleSpeed]));
       t.setBounceX(1);
       t.setCollideWorldBounds(true);
+      if (isBeach) t.play('crab_walk');
     });
 
     // Ёжики — только в лесу
@@ -880,8 +895,10 @@ class GameScene extends Phaser.Scene {
     this.cloudList = spawnClouds(this);
     if (isBeach) {
       this.decorList = spawnBeachDecor(this);
+      this.startWaves();
       this.startSupBoarder();
       this.scheduleFishJump(30000);
+      this.time.delayedCall(Phaser.Math.Between(6000, 12000), () => this.flySeagullFlock());
       SoundFX.startBeachAmbient();
       SoundFX.startBeachMusic();
       SoundFX.startSeagulls();
@@ -971,17 +988,18 @@ class GameScene extends Phaser.Scene {
       onComplete: () => msg.destroy()
     });
 
-    // Плавное затемнение за 10 секунд
+    // Пляж: лёгкое потепление только фона; лес: полная тьма поверх всего
+    const overlayTargetAlpha = this.theme === 'beach' ? 0.30 : 0.58;
+    const starsTargetAlpha   = this.theme === 'beach' ? 0.45 : 1.0;
     this.tweens.add({
       targets: this.nightOverlay,
-      alpha: 0.58,
+      alpha: overlayTargetAlpha,
       duration: 10000,
       ease: 'Sine.easeInOut'
     });
-    // Звёзды и луна появляются вместе с тьмой
     this.tweens.add({
       targets: [this.nightStars, this.nightMoon],
-      alpha: 1,
+      alpha: starsTargetAlpha,
       duration: 10000,
       ease: 'Sine.easeInOut'
     });
@@ -1110,6 +1128,77 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  startWaves() {
+    // Три ряда волн с разными скоростями — плывут справа налево
+    const rows = [
+      { y: 355, speed: 28, alpha: 0.55, w: 90, h: 9,  color: 0xAADFF8 },
+      { y: 372, speed: 20, alpha: 0.45, w: 72, h: 7,  color: 0xCCEEFF },
+      { y: 388, speed: 14, alpha: 0.35, w: 56, h: 6,  color: 0xDDF5FF },
+    ];
+    this._waveGfx = [];
+    rows.forEach(row => {
+      // Создаём 14 эллипсов на ряд с равным шагом
+      const step = 90;
+      for (let i = 0; i < Math.ceil(GAME_W / step) + 2; i++) {
+        const wg = this.add.graphics().setDepth(-1).setScrollFactor(0);
+        wg.fillStyle(row.color);
+        wg.fillEllipse(0, 0, row.w, row.h);
+        wg.setAlpha(row.alpha);
+        // Начальная x-позиция — равномерно по экрану
+        wg._startX = i * step;
+        wg._speed  = row.speed + Phaser.Math.FloatBetween(-4, 4);
+        wg._row    = row;
+        wg.x = wg._startX;
+        wg.y = row.y;
+        this._waveGfx.push(wg);
+      }
+    });
+  }
+
+  flySeagullFlock() {
+    if (this.levelOver) return;
+    const fromLeft = Phaser.Math.RND.frac() > 0.5;
+    const count    = Phaser.Math.Between(2, 4);
+    for (let k = 0; k < count; k++) {
+      const y        = Phaser.Math.Between(55, 130);
+      const startX   = fromLeft ? -60 - k * 30 : GAME_W + 60 + k * 30;
+      const endX     = fromLeft ? GAME_W + 80   : -80;
+      const duration = Phaser.Math.Between(10000, 16000);
+      const sg = this.add.graphics().setScrollFactor(0).setDepth(1);
+      // Силуэт чайки: две дуги-крыла в форме буквы M
+      const drawGull = (gfx, flip) => {
+        gfx.clear();
+        gfx.lineStyle(2, 0x555566, 0.85);
+        const d = flip ? -1 : 1;
+        gfx.beginPath();
+        gfx.moveTo(-12 * d, 0);
+        gfx.lineTo(-6  * d, -5);
+        gfx.lineTo(0,        2);
+        gfx.lineTo(6   * d, -5);
+        gfx.lineTo(12  * d, 0);
+        gfx.strokePath();
+      };
+      drawGull(sg, fromLeft);
+      sg.x = startX;
+      sg.y = y + k * Phaser.Math.Between(8, 18);
+
+      // Лёгкое вертикальное покачивание
+      this.tweens.add({
+        targets: sg, y: sg.y + 8,
+        duration: Phaser.Math.Between(1200, 1800),
+        yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
+      });
+      this.tweens.add({
+        targets: sg, x: endX, duration, ease: 'Linear',
+        onComplete: () => sg.destroy()
+      });
+    }
+    // Следующая стая через 28–40 сек
+    this.time.delayedCall(Phaser.Math.Between(28000, 40000), () => {
+      if (!this.levelOver) this.flySeagullFlock();
+    });
+  }
+
   startSupBoarder() {
     const seaY = GAME_H - 56; // чуть выше земли, у воды
     const sup = this.add.image(80, seaY, 'sup_board')
@@ -1144,16 +1233,20 @@ class GameScene extends Phaser.Scene {
   }
 
   doFishJump() {
+    // Рыбки прыгают из моря (≈y 430 — граница воды и песка на пляже)
+    const seaY = 432;
     const count = Phaser.Math.Between(2, 5);
     for (let i = 0; i < count; i++) {
-      this.time.delayedCall(i * 180, () => {
-        const x = Phaser.Math.Between(50, GAME_W - 50);
-        const fish = this.add.image(x, GAME_H - 24, 'jumping_fish')
-          .setDepth(-2).setAlpha(0.9);
+      this.time.delayedCall(i * 200, () => {
+        const x = Phaser.Math.Between(60, GAME_W - 60);
+        const sc = Phaser.Math.FloatBetween(0.9, 1.4);
+        const fish = this.add.image(x, seaY, 'jumping_fish')
+          .setDepth(-1).setAlpha(0.92).setScale(sc)
+          .setAngle(Phaser.Math.Between(-15, 15));
         this.tweens.add({
           targets: fish,
-          y: GAME_H - 24 - Phaser.Math.Between(50, 100),
-          duration: 350, ease: 'Sine.easeOut', yoyo: true,
+          y: seaY - Phaser.Math.Between(80, 130),
+          duration: 320, ease: 'Sine.easeOut', yoyo: true,
           onComplete: () => fish.destroy()
         });
       });
@@ -1185,6 +1278,7 @@ class GameScene extends Phaser.Scene {
       t.setVelocityX(Phaser.Math.RND.pick([-spd, spd]));
       t.setBounceX(1);
       t.setCollideWorldBounds(true);
+      if (kind === 'crab') t.play('crab_walk');
     } else {
       const h = this.hedgehogs.create(x, -20, 'hedgehog');
       const spd = this.hedgehogSpeed;
@@ -1549,6 +1643,14 @@ class GameScene extends Phaser.Scene {
       if (c.x <= 32) c.setVelocityX(Math.abs(c.body.velocity.x));
       if (c.x >= GAME_W - 32) c.setVelocityX(-Math.abs(c.body.velocity.x));
     });
+
+    // Анимация волн (пляж)
+    if (this._waveGfx) {
+      this._waveGfx.forEach(wg => {
+        wg.x -= wg._speed * dt;
+        if (wg.x < -wg._row.w) wg.x = GAME_W + wg._row.w;
+      });
+    }
 
     // Двигаем облака
     this.cloudList.forEach(cloud => {
@@ -2392,6 +2494,58 @@ function drawCrab(scene) {
   g.fillStyle(0xffffff); g.fillEllipse(29, 44, 9, 2.5);
 
   g.generateTexture('crab', 58, 50);
+  g.destroy();
+}
+
+// Второй кадр краба — лапки в противофазе (передние и задние подняты)
+function drawCrabB(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+
+  // Левые ноги: лапки 0 и 2 ПОДНЯТЫ (+7), лапка 1 ОПУЩЕНА (+3)
+  g.fillStyle(0xCC4411);
+  g.fillPoints([{x:13,y:32},{x:10,y:30},{x:2,y:23},{x:4,y:27}],  true); // перед ↑
+  g.fillPoints([{x:12,y:36},{x:9,y:34},{x:1,y:41},{x:3,y:45}],   true); // средняя ↓
+  g.fillPoints([{x:13,y:40},{x:10,y:40},{x:4,y:40},{x:7,y:40}],  true); // зад ↑
+  // Правые ноги (зеркально)
+  g.fillPoints([{x:45,y:32},{x:48,y:30},{x:56,y:23},{x:54,y:27}], true);
+  g.fillPoints([{x:46,y:36},{x:49,y:34},{x:57,y:41},{x:55,y:45}], true);
+  g.fillPoints([{x:45,y:40},{x:48,y:40},{x:54,y:40},{x:51,y:40}], true);
+
+  // Коготки (смещены вместе с лапками)
+  g.fillStyle(0xAA2200);
+  [[2,23],[1,41],[4,40]].forEach(([x,y]) => g.fillCircle(x,y,2));
+  [[56,23],[57,41],[54,40]].forEach(([x,y]) => g.fillCircle(x,y,2));
+
+  // Руки клешней
+  g.fillStyle(0xDD4400);
+  g.fillPoints([{x:14,y:30},{x:10,y:28},{x:5,y:14},{x:9,y:14}], true);
+  g.fillPoints([{x:44,y:30},{x:48,y:28},{x:53,y:14},{x:49,y:14}], true);
+  // Шары клешней
+  g.fillStyle(0xFF5522); g.fillCircle(7,  14, 8); g.fillCircle(51, 14, 8);
+  g.fillStyle(0xFF8866); g.fillCircle(6,  12, 4); g.fillCircle(50, 12, 4);
+  // Зубцы
+  g.fillStyle(0xFF3300);
+  g.fillTriangle(3,10,6,10,3,1); g.fillTriangle(6,10,10,10,10,2);
+  g.fillTriangle(55,10,52,10,55,1); g.fillTriangle(52,10,48,10,48,2);
+  g.fillStyle(0xBB2200);
+  g.fillTriangle(3,10,5,10,3,2); g.fillTriangle(7,10,10,10,9,3);
+  g.fillTriangle(55,10,53,10,55,2); g.fillTriangle(51,10,48,10,49,3);
+
+  // Тело (идентично frame A)
+  g.fillStyle(0xFF6633); g.fillEllipse(29, 36, 36, 24);
+  g.fillStyle(0xFF8850); g.fillEllipse(29, 34, 28, 16);
+  g.fillStyle(0xDD5522); g.fillEllipse(22,34,8,10); g.fillEllipse(29,32,8,10); g.fillEllipse(36,34,8,10);
+  g.fillStyle(0xFFAA77); g.fillEllipse(29, 42, 22, 10);
+  // Глаза
+  g.fillStyle(0xCC4411); g.fillRect(21,23,3,9); g.fillRect(34,23,3,9);
+  g.fillStyle(0x111111); g.fillCircle(22,21,5); g.fillCircle(36,21,5);
+  g.fillStyle(0xffffff); g.fillCircle(23,19,2); g.fillCircle(37,19,2);
+  g.fillStyle(0x000000); g.fillCircle(23,20,1); g.fillCircle(37,20,1);
+  // Рот
+  g.fillStyle(0xCC4411); g.fillEllipse(29,45,14,5);
+  g.fillStyle(0xffffff); g.fillEllipse(29,44,9,2.5);
+
+  g.generateTexture('crab_b', 58, 50);
   g.destroy();
 }
 
