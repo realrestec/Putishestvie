@@ -48,6 +48,16 @@ class BootScene extends Phaser.Scene {
     drawCapybara(this);
     drawPlane(this);
     drawBalloon(this);
+    drawBeachBackground(this);
+    drawBeachGround(this);
+    drawBeachPlatform(this);
+    drawPalmTree(this);
+    drawShell(this);
+    drawStarfishBonus(this);
+    drawCrab(this);
+    drawBeachUmbrella(this);
+    drawSupBoard(this);
+    drawJumpingFish(this);
     drawPotion(this);
     drawApple(this);
     drawPlatform(this);
@@ -145,10 +155,10 @@ class MenuScene extends Phaser.Scene {
       .on('pointerover', function() { this.setAlpha(0.7); })
       .on('pointerout',  function() { this.setAlpha(1); });
 
-    // Старт по любой клавише или клику
-    const startGame = () => this.scene.start('Game', { level: 1, score: 0, lives: 3, apples: 5 });
-    this.input.keyboard.once('keydown', startGame);
-    this.input.once('pointerdown', startGame);
+    // Старт по любой клавише или клику → экран выбора уровня
+    const goSelect = () => this.scene.start('LevelSelect');
+    this.input.keyboard.once('keydown', goSelect);
+    this.input.once('pointerdown', goSelect);
   }
 
   update(time, delta) {
@@ -160,6 +170,92 @@ class MenuScene extends Phaser.Scene {
         cloud.y = Phaser.Math.Between(30, 110);
       }
     });
+  }
+}
+
+// --- Выбор уровня ---
+class LevelSelectScene extends Phaser.Scene {
+  constructor() { super('LevelSelect'); }
+
+  create() {
+    this.add.image(GAME_W / 2, GAME_H / 2, 'background');
+
+    const overlay = this.add.graphics();
+    overlay.fillStyle(0x000000, 0.45);
+    overlay.fillRect(0, 0, GAME_W, GAME_H);
+
+    this.add.text(GAME_W / 2, 55, 'Выбери уровень', {
+      fontSize: '42px', fill: '#FFD700', stroke: '#000', strokeThickness: 6, fontStyle: 'bold'
+    }).setOrigin(0.5);
+
+    // Два уровня
+    const levels = [
+      { num: 1, emoji: '🌲', name: 'Лес',    sub: 'Черепашки и ёжики',  color: 0x2d6e1a },
+      { num: 2, emoji: '🏖', name: 'Пляж',   sub: 'Крабики и морские звёзды', color: 0x1a6e8c },
+    ];
+
+    this._sel = 0;
+    this._cards = [];
+
+    levels.forEach((lvl, i) => {
+      const cx = GAME_W / 2 - 190 + i * 380;
+      const cy = GAME_H / 2 + 10;
+
+      // Рамка карточки
+      const card = this.add.graphics();
+      this._cards.push({ card, cx, cy, lvl });
+
+      // Иконка уровня
+      this.add.text(cx, cy - 60, lvl.emoji, { fontSize: '64px' }).setOrigin(0.5);
+
+      // Название уровня
+      this.add.text(cx, cy + 25, `Уровень ${lvl.num}`, {
+        fontSize: '22px', fill: '#ffffff', stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+      }).setOrigin(0.5);
+
+      this.add.text(cx, cy + 55, lvl.name, {
+        fontSize: '30px', fill: '#FFD700', stroke: '#000', strokeThickness: 4, fontStyle: 'bold'
+      }).setOrigin(0.5);
+
+      this.add.text(cx, cy + 90, lvl.sub, {
+        fontSize: '15px', fill: '#ddddff', stroke: '#000', strokeThickness: 2
+      }).setOrigin(0.5);
+
+      // Кликабельность
+      const hitZone = this.add.zone(cx, cy, 320, 260).setInteractive({ useHandCursor: true });
+      hitZone.on('pointerdown', () => { this._sel = i; this._startSelected(); });
+      hitZone.on('pointerover', () => { this._sel = i; this._drawCards(); });
+    });
+
+    this._drawCards();
+
+    // Подсказка управления
+    const hint = this.add.text(GAME_W / 2, GAME_H - 42, '⬅ ➡ — выбор     Enter / Space — начать     Esc — назад', {
+      fontSize: '15px', fill: '#aaaaff', stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5);
+    this.tweens.add({ targets: hint, alpha: 0.5, duration: 900, yoyo: true, repeat: -1 });
+
+    this.input.keyboard.on('keydown', e => {
+      if (e.key === 'ArrowLeft')  { this._sel = 0; this._drawCards(); }
+      if (e.key === 'ArrowRight') { this._sel = 1; this._drawCards(); }
+      if (e.key === 'Enter' || e.key === ' ') this._startSelected();
+      if (e.key === 'Escape') this.scene.start('Menu');
+    });
+  }
+
+  _drawCards() {
+    this._cards.forEach(({ card, cx, cy, lvl }, i) => {
+      card.clear();
+      const selected = i === this._sel;
+      card.fillStyle(selected ? lvl.color : 0x111133, selected ? 0.85 : 0.6);
+      card.fillRoundedRect(cx - 158, cy - 130, 316, 260, 18);
+      card.lineStyle(selected ? 5 : 2, selected ? 0xFFD700 : 0x555588, 1);
+      card.strokeRoundedRect(cx - 158, cy - 130, 316, 260, 18);
+    });
+  }
+
+  _startSelected() {
+    this.scene.start('Game', { level: this._sel + 1, score: 0, lives: 3, apples: 5 });
   }
 }
 
@@ -543,6 +639,7 @@ class GameScene extends Phaser.Scene {
     this.girlSize = 'big';
     this.isInvincible = false;
     this.levelOver = false;
+    this.theme = this.currentLevel === 2 ? 'beach' : 'forest';
     // Следующий порог для получения жизни
     const prevMilestone = Math.floor(this.score / 50) * 50;
     this.nextLifeMilestone = prevMilestone + 50;
@@ -551,8 +648,13 @@ class GameScene extends Phaser.Scene {
   create() {
     const levelData = generateLevelData(this.currentLevel);
 
+    const isBeach = this.theme === 'beach';
+    const bgKey   = isBeach ? 'beach_bg'       : 'background';
+    const gndKey  = isBeach ? 'beach_ground'   : 'ground';
+    const platKey = isBeach ? 'beach_platform' : 'platform';
+
     // Фон
-    this.add.image(GAME_W / 2, GAME_H / 2, 'background');
+    this.add.image(GAME_W / 2, GAME_H / 2, bgKey);
 
     // === Ночная тема (активируется в середине уровня) ===
     // Тёмный оверлей
@@ -595,19 +697,19 @@ class GameScene extends Phaser.Scene {
     // Земля
     this.ground = this.physics.add.staticGroup();
     for (let x = 0; x < GAME_W; x += 64) {
-      this.ground.create(x + 32, GAME_H - 16, 'ground').refreshBody();
+      this.ground.create(x + 32, GAME_H - 16, gndKey).refreshBody();
     }
 
     // Платформы
     this.platforms = this.physics.add.staticGroup();
     levelData.platforms.forEach(p => {
-      this.platforms.create(p.x, p.y, 'platform').refreshBody();
+      this.platforms.create(p.x, p.y, platKey).refreshBody();
     });
 
     // Движущаяся платформа — статическое тело, позиция обновляется вручную
     const mpd = levelData.movingPlatform;
-    this.movingPlatform = this.physics.add.staticImage(mpd.x, mpd.y, 'platform');
-    this.movingPlatform.setTint(0xffdd88);
+    this.movingPlatform = this.physics.add.staticImage(mpd.x, mpd.y, platKey);
+    this.movingPlatform.setTint(isBeach ? 0x88ccff : 0xffdd88);
     this.movingPlatform._minX     = mpd.minX;
     this.movingPlatform._maxX     = mpd.maxX;
     this.movingPlatform._speed    = mpd.speed;
@@ -772,7 +874,13 @@ class GameScene extends Phaser.Scene {
 
     this.throwCooldown = 0;
     this.cloudList = spawnClouds(this);
-    this.decorList = spawnGroundDecor(this);
+    if (isBeach) {
+      this.decorList = spawnBeachDecor(this);
+      this.startSupBoarder();
+      this.scheduleFishJump(30000);
+    } else {
+      this.decorList = spawnGroundDecor(this);
+    }
     this._windTime = 0;
 
     // Самолёт — ~3 раза за уровень
@@ -780,7 +888,7 @@ class GameScene extends Phaser.Scene {
     // Воздушный шар — каждые 2 минуты
     this.time.delayedCall(Phaser.Math.Between(15000, 30000), () => this.scheduleBalloon());
 
-    // Первая капибара через 5 сек, потом каждые 8-14 сек
+    // Первая капибара / морская звезда через 5 сек, потом каждые 8-14 сек
     this.scheduleCapybara(5000);
 
     // Враги респавнятся — первый через 4-7 сек, потом каждые 5-10 сек
@@ -845,7 +953,8 @@ class GameScene extends Phaser.Scene {
 
   startNight() {
     // Надпись
-    const msg = this.add.text(GAME_W / 2, GAME_H / 2 - 70, '🌙 Наступает ночь...', {
+    const nightLabel = this.theme === 'beach' ? '🌅 Закат на пляже...' : '🌙 Наступает ночь...';
+    const msg = this.add.text(GAME_W / 2, GAME_H / 2 - 70, nightLabel, {
       fontSize: '36px', fill: '#c8c8ff',
       stroke: '#00001a', strokeThickness: 6, fontStyle: 'bold'
     }).setOrigin(0.5).setScrollFactor(0).setDepth(12).setAlpha(0);
@@ -907,7 +1016,10 @@ class GameScene extends Phaser.Scene {
     const t3 = Phaser.Math.Between(210000, 275000);
     [t1, t2, t3].forEach(delay => {
       this.time.delayedCall(delay, () => {
-        if (!this.levelOver) this.flyPlane();
+        if (!this.levelOver) {
+          if (this.theme === 'beach') this.flyBannerPlane();
+          else this.flyPlane();
+        }
       });
     });
   }
@@ -941,6 +1053,106 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  flyBannerPlane() {
+    const fromLeft = Phaser.Math.RND.frac() > 0.5;
+    const y        = Phaser.Math.Between(35, 90);
+    const startX   = fromLeft ? -130 : GAME_W + 130;
+    const endX     = fromLeft ? GAME_W + 130 : -130;
+    const duration = Phaser.Math.Between(9000, 14000);
+
+    const plane = this.add.image(startX, y, 'plane')
+      .setScrollFactor(0).setDepth(0).setFlipX(!fromLeft).setScale(0.85);
+
+    // Баннер "Привет Милана!" на верёвке за самолётом
+    const bannerOffX = fromLeft ? -90 : 90;
+    const banner = this.add.text(startX + bannerOffX, y + 12, 'Привет Милана! 💕', {
+      fontSize: '13px', fill: '#ffffff',
+      stroke: '#cc0066', strokeThickness: 3, fontStyle: 'bold'
+    }).setScrollFactor(0).setDepth(0).setOrigin(fromLeft ? 1 : 0, 0.5);
+
+    // Верёвка
+    const rope = this.add.graphics().setScrollFactor(0).setDepth(0);
+
+    const trail = this.time.addEvent({
+      delay: 200, loop: true,
+      callback: () => {
+        if (!plane.active) { trail.remove(); return; }
+        const dot = this.add.graphics().setScrollFactor(0).setDepth(-1);
+        dot.fillStyle(0xffffff, 0.4);
+        dot.fillEllipse(plane.x + (fromLeft ? -28 : 28), plane.y, 10, 4);
+        this.tweens.add({ targets: dot, alpha: 0, duration: 2000, onComplete: () => dot.destroy() });
+      }
+    });
+
+    // Синхронно двигаем самолёт + баннер + верёвку
+    this.tweens.add({
+      targets: plane, x: endX, duration, ease: 'Linear',
+      onUpdate: () => {
+        banner.x = plane.x + bannerOffX;
+        banner.y = plane.y + 12 + Math.sin(Date.now() * 0.003) * 3;
+        rope.clear();
+        rope.lineStyle(1, 0xffffff, 0.7);
+        rope.beginPath();
+        rope.moveTo(plane.x + (fromLeft ? -20 : 20), plane.y + 8);
+        rope.lineTo(banner.x + (fromLeft ? 0 : 0), banner.y);
+        rope.strokePath();
+      },
+      onComplete: () => {
+        trail.remove(); plane.destroy(); banner.destroy(); rope.destroy();
+      }
+    });
+  }
+
+  startSupBoarder() {
+    const seaY = GAME_H - 56; // чуть выше земли, у воды
+    const sup = this.add.image(80, seaY, 'sup_board')
+      .setDepth(-3).setAlpha(0.88).setScale(1.1);
+
+    const goRight = () => {
+      this.tweens.add({
+        targets: sup, x: GAME_W - 90, duration: Phaser.Math.Between(14000, 20000),
+        ease: 'Sine.easeInOut',
+        onComplete: () => { sup.setFlipX(true); goLeft(); }
+      });
+    };
+    const goLeft = () => {
+      this.tweens.add({
+        targets: sup, x: 80, duration: Phaser.Math.Between(14000, 20000),
+        ease: 'Sine.easeInOut',
+        onComplete: () => { sup.setFlipX(false); goRight(); }
+      });
+    };
+
+    // Лёгкое покачивание на волнах
+    this.tweens.add({ targets: sup, y: seaY - 4, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    goRight();
+  }
+
+  scheduleFishJump(delay) {
+    this.time.delayedCall(delay, () => {
+      if (this.levelOver) return;
+      this.doFishJump();
+      this.scheduleFishJump(30000);
+    });
+  }
+
+  doFishJump() {
+    const count = Phaser.Math.Between(2, 5);
+    for (let i = 0; i < count; i++) {
+      this.time.delayedCall(i * 180, () => {
+        const x = Phaser.Math.Between(50, GAME_W - 50);
+        const fish = this.add.image(x, GAME_H - 24, 'jumping_fish')
+          .setDepth(-2).setAlpha(0.9);
+        this.tweens.add({
+          targets: fish,
+          y: GAME_H - 24 - Phaser.Math.Between(50, 100),
+          duration: 350, ease: 'Sine.easeOut', yoyo: true,
+          onComplete: () => fish.destroy()
+        });
+      });
+    }
+  }
+
   scheduleEnemy(delay) {
     this.time.delayedCall(delay, () => {
       if (!this.levelOver) this.spawnEnemy();
@@ -954,11 +1166,14 @@ class GameScene extends Phaser.Scene {
     const total = this.turtles.countActive() + this.hedgehogs.countActive();
     if (total >= 8) return;
 
-    const kind = type || (Phaser.Math.RND.frac() < 0.55 ? 'turtle' : 'hedgehog');
+    // На пляже только крабики (в группе черепах, можно запрыгнуть); ёжики только в лесу
+    const kind = this.theme === 'beach' ? 'crab' :
+      (type || (Phaser.Math.RND.frac() < 0.55 ? 'turtle' : 'hedgehog'));
     const x = Phaser.Math.Between(60, GAME_W - 60);
 
-    if (kind === 'turtle') {
-      const t = this.turtles.create(x, -20, 'turtle');
+    if (kind === 'turtle' || kind === 'crab') {
+      const tex = kind === 'crab' ? 'crab' : 'turtle';
+      const t = this.turtles.create(x, -20, tex);
       const spd = this.turtleSpeed;
       t.setVelocityX(Phaser.Math.RND.pick([-spd, spd]));
       t.setBounceX(1);
@@ -982,7 +1197,8 @@ class GameScene extends Phaser.Scene {
   spawnCapybara() {
     if (this.levelOver) return;
     const x = Phaser.Math.Between(60, GAME_W - 60);
-    const capy = this.capybaras.create(x, -20, 'capybara');
+    const bonusTex = this.theme === 'beach' ? 'starfish_bonus' : 'capybara';
+    const capy = this.capybaras.create(x, -20, bonusTex);
     capy.setCollideWorldBounds(true);
     capy.setBounceX(1);
     capy.setVelocityY(120);
@@ -1016,7 +1232,8 @@ class GameScene extends Phaser.Scene {
     this.score += 20;
     this.scoreText.setText('Очки: ' + this.score);
 
-    const pop = this.add.text(capy.x, capy.y - 20, '🦫 +20', {
+    const bonusEmoji = this.theme === 'beach' ? '⭐ +20' : '🦫 +20';
+    const pop = this.add.text(capy.x, capy.y - 20, bonusEmoji, {
       fontSize: '22px', fill: '#ffdd00', stroke: '#000', strokeThickness: 3
     }).setOrigin(0.5);
     this.tweens.add({
@@ -1329,12 +1546,11 @@ class GameScene extends Phaser.Scene {
       }
     });
 
-    // Покачивание травы и цветов от ветра
+    // Покачивание травы и цветов от ветра (только для леса)
     this._windTime += dt;
-    // Порыв ветра — плавно меняет силу
     const windStrength = 5 + 3 * Math.sin(this._windTime * 0.4);
     this.decorList.forEach(d => {
-      d.img.angle = windStrength * Math.sin(this._windTime * d.speed + d.phase);
+      if (d.speed > 0) d.img.angle = windStrength * Math.sin(this._windTime * d.speed + d.phase);
     });
   }
 }
@@ -1993,6 +2209,259 @@ function spawnGroundDecor(scene) {
 }
 
 // ============================
+//  ПЛЯЖНЫЕ ТЕКСТУРЫ И ДЕКОРАЦИИ
+// ============================
+
+function drawShell(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  // Основная раковина
+  g.fillStyle(0xFFB6A3);
+  g.fillEllipse(12, 11, 22, 18);
+  // Спираль
+  g.fillStyle(0xFF8C7A);
+  g.fillEllipse(12, 12, 14, 11);
+  g.fillStyle(0xFFCFBF);
+  g.fillEllipse(12, 13, 7, 6);
+  // Рёбра раковины
+  g.lineStyle(1, 0xFF8C7A, 0.7);
+  g.beginPath(); g.moveTo(12, 3); g.lineTo(3, 17); g.strokePath();
+  g.beginPath(); g.moveTo(12, 3); g.lineTo(12, 19); g.strokePath();
+  g.beginPath(); g.moveTo(12, 3); g.lineTo(21, 17); g.strokePath();
+  // Основание
+  g.fillStyle(0xFFD0C0); g.fillEllipse(12, 19, 18, 5);
+  g.generateTexture('shell', 24, 22);
+  g.destroy();
+}
+
+function drawBeachBackground(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  // Небо — тёплый голубой
+  g.fillGradientStyle(0x87CEEB, 0x87CEEB, 0xFFE4B5, 0xFFE4B5, 1);
+  g.fillRect(0, 0, GAME_W, GAME_H);
+  // Солнце
+  g.fillStyle(0xFFD700, 0.85);
+  g.fillCircle(820, 70, 48);
+  g.fillStyle(0xFFE86A, 0.4);
+  g.fillCircle(820, 70, 64);
+  // Море — несколько слоёв глубины
+  g.fillStyle(0x1E90FF, 0.55); g.fillRect(0, 280, GAME_W, 140);
+  g.fillStyle(0x00BFFF, 0.5);  g.fillRect(0, 310, GAME_W, 120);
+  g.fillStyle(0x40D0FF, 0.45); g.fillRect(0, 340, GAME_W, 100);
+  // Волны — белые гребни
+  for (let wx = 0; wx < GAME_W; wx += 90) {
+    g.fillStyle(0xffffff, 0.3);
+    g.fillEllipse(wx + 45, 355, 80, 10);
+  }
+  for (let wx = 45; wx < GAME_W; wx += 90) {
+    g.fillStyle(0xffffff, 0.2);
+    g.fillEllipse(wx + 40, 375, 70, 8);
+  }
+  // Линия горизонта / пляж
+  g.fillStyle(0xF4C66A, 1); g.fillRect(0, 410, GAME_W, GAME_H - 410);
+  // Влажный песок у воды (темнее)
+  g.fillStyle(0xD4A840, 0.7); g.fillRect(0, 410, GAME_W, 30);
+  g.generateTexture('beach_bg', GAME_W, GAME_H);
+  g.destroy();
+}
+
+function drawBeachGround(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  g.fillStyle(0xE8C060); g.fillRect(0, 0, 64, 32);
+  g.fillStyle(0xD4A840); g.fillRect(0, 0, 64, 10);
+  // Волнистый верхний край
+  for (let i = 0; i < 64; i += 8) {
+    g.fillStyle(0xF0D070); g.fillEllipse(i + 4, 5, 10, 6);
+  }
+  // Пятнышки — мелкие камушки
+  g.fillStyle(0xC8943A);
+  [8, 20, 36, 50].forEach(x => g.fillCircle(x, 18, 2));
+  g.generateTexture('beach_ground', 64, 32);
+  g.destroy();
+}
+
+function drawBeachPlatform(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  // Доски причала
+  g.fillStyle(0x9B6B30); g.fillRoundedRect(0, 2, 64, 24, 4);
+  // Горизонтальные доски
+  g.fillStyle(0xAD7A3A);
+  [2, 9, 16, 23].forEach(y => g.fillRect(2, y, 60, 5));
+  g.fillStyle(0x7A4E20);
+  [8, 15, 22].forEach(y => g.fillRect(0, y, 64, 1));
+  // Гвозди / стыки
+  g.fillStyle(0x555555);
+  [10, 32, 54].forEach(x => { g.fillCircle(x, 6, 2); g.fillCircle(x, 20, 2); });
+  // Водоросль
+  g.fillStyle(0x50C878, 0.6); g.fillEllipse(6, 3, 8, 4); g.fillEllipse(58, 3, 8, 4);
+  g.generateTexture('beach_platform', 64, 28);
+  g.destroy();
+}
+
+function drawCrab(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  // Ноги (6 штук, по 3 с каждой стороны)
+  g.fillStyle(0xCC4411);
+  [[-18,14,8,7],[-20,19,8,6],[-17,24,9,6]].forEach(([x,y,w,h]) => g.fillEllipse(x,y,w,h));
+  [[58,14,8,7],[60,19,8,6],[57,24,9,6]].forEach(([x,y,w,h]) => g.fillEllipse(x,y,w,h));
+  // Клешни
+  g.fillStyle(0xFF5522);
+  // Левая клешня (вперёд)
+  g.fillTriangle(-2, 8, -14, 2, -14, 16);
+  g.fillCircle(-10, 9, 6);
+  // Правая клешня (назад)
+  g.fillTriangle(42, 10, 54, 5, 54, 18);
+  g.fillCircle(49, 12, 5);
+  // Тело
+  g.fillStyle(0xFF6633); g.fillEllipse(20, 18, 36, 24);
+  g.fillStyle(0xFF8855); g.fillEllipse(20, 17, 28, 16);
+  // Брюшко
+  g.fillStyle(0xFFAA77); g.fillEllipse(20, 22, 22, 10);
+  // Глаза на стебельках
+  g.fillStyle(0xCC4411);
+  g.fillRect(12, 5, 3, 6); g.fillRect(22, 5, 3, 6);
+  g.fillStyle(0x111111); g.fillCircle(13, 4, 4); g.fillCircle(23, 4, 4);
+  g.fillStyle(0xffffff); g.fillCircle(14, 3, 1.5); g.fillCircle(24, 3, 1.5);
+  // Рот
+  g.fillStyle(0xCC4411); g.fillEllipse(20, 26, 12, 4);
+  g.fillStyle(0xffffff); g.fillEllipse(20, 25, 8, 2);
+  g.generateTexture('crab', 42, 32);
+  g.destroy();
+}
+
+function drawStarfishBonus(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  g.fillStyle(0xFF7F00);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+    g.fillTriangle(
+      15 + Math.cos(a) * 13, 15 + Math.sin(a) * 13,
+      15 + Math.cos(a - 0.45) * 5, 15 + Math.sin(a - 0.45) * 5,
+      15 + Math.cos(a + 0.45) * 5, 15 + Math.sin(a + 0.45) * 5
+    );
+  }
+  g.fillStyle(0xFF9933); g.fillCircle(15, 15, 5);
+  g.fillStyle(0xFFBB55);
+  for (let i = 0; i < 5; i++) {
+    const a = (i / 5) * Math.PI * 2 - Math.PI / 2;
+    g.fillCircle(15 + Math.cos(a) * 9, 15 + Math.sin(a) * 9, 1.5);
+  }
+  g.generateTexture('starfish_bonus', 30, 30);
+  g.destroy();
+}
+
+function drawPalmTree(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  // Ствол
+  g.fillStyle(0x8B6914);
+  g.fillPoints([{x:18,y:130},{x:22,y:130},{x:24,y:60},{x:20,y:30},{x:16,y:60}], true);
+  // Текстура ствола
+  g.fillStyle(0x7A5C10);
+  [110,90,70,55].forEach(y => g.fillEllipse(20, y, 8, 4));
+  // Листья
+  const leafColor = [[0x228B22,0],[0x2EA82E,0.4],[0x1A7A1A,0.8],[0x20A020,1.2],[0x25B025,1.6],[0x1A8A1A,2.0]];
+  leafColor.forEach(([c, angle]) => {
+    g.fillStyle(c);
+    const ax = 20 + Math.cos(angle - 0.5) * 6;
+    const ay = 28 + Math.sin(angle - 0.5) * 3;
+    const bx = 20 + Math.cos(angle) * 38;
+    const by = 28 + Math.sin(angle) * 16;
+    const cx = 20 + Math.cos(angle + 0.5) * 6;
+    const cy = 28 + Math.sin(angle + 0.5) * 3;
+    g.fillTriangle(ax, ay, bx, by, cx, cy);
+  });
+  // Кокосы
+  g.fillStyle(0x8B6914); g.fillCircle(18, 32, 4); g.fillCircle(24, 30, 4);
+  g.generateTexture('palm_tree', 50, 132);
+  g.destroy();
+}
+
+function drawBeachUmbrella(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  // Шест
+  g.fillStyle(0xAA8844); g.fillRect(38, 10, 4, 80);
+  // Сегменты зонтика (6 цветов)
+  const cols = [0xFF4444, 0xFFFF44, 0x44FF44, 0x4444FF, 0xFF44FF, 0xFF8844];
+  for (let i = 0; i < 6; i++) {
+    const a1 = (i / 6) * Math.PI - 0.05;
+    const a2 = ((i + 1) / 6) * Math.PI + 0.05;
+    g.fillStyle(cols[i]);
+    g.fillTriangle(
+      40, 12,
+      40 + Math.cos(a1) * 38, 12 - Math.sin(a1) * 24,
+      40 + Math.cos(a2) * 38, 12 - Math.sin(a2) * 24
+    );
+  }
+  g.fillStyle(0xffffff, 0.2); g.fillEllipse(40, 12, 76, 20);
+  g.fillStyle(0xAA8844); g.fillCircle(40, 12, 4);
+  // Коврик под зонтиком
+  g.fillStyle(0xFF9966, 0.6); g.fillEllipse(40, 88, 64, 12);
+  g.generateTexture('beach_umbrella', 80, 92);
+  g.destroy();
+}
+
+function drawSupBoard(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  // Доска
+  g.fillStyle(0xFF6633); g.fillEllipse(35, 22, 68, 12);
+  g.fillStyle(0xFF8855); g.fillEllipse(35, 20, 60, 7);
+  // Человек (схематично)
+  g.fillStyle(0xFFCC99); g.fillCircle(35, 6, 5);   // голова
+  g.fillStyle(0x4488FF); g.fillRect(31, 10, 8, 9); // тело
+  // Весло
+  g.fillStyle(0x8B5E3C);
+  g.fillRect(48, 4, 2, 20);
+  g.fillStyle(0xAA7744); g.fillEllipse(49, 24, 6, 10);
+  g.generateTexture('sup_board', 70, 32);
+  g.destroy();
+}
+
+function drawJumpingFish(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  g.fillStyle(0x4488FF);
+  g.fillEllipse(12, 8, 20, 10);
+  // Хвост
+  g.fillTriangle(22, 6, 28, 1, 28, 14);
+  // Плавник
+  g.fillTriangle(10, 3, 8, -2, 16, 3);
+  g.fillStyle(0x88BBFF); g.fillEllipse(10, 8, 10, 6);
+  g.fillStyle(0x111111); g.fillCircle(5, 7, 2);
+  g.fillStyle(0xffffff); g.fillCircle(5, 6, 1);
+  g.generateTexture('jumping_fish', 30, 16);
+  g.destroy();
+}
+
+function spawnBeachDecor(scene) {
+  const groundY = GAME_H - 32;
+  const decorItems = [];
+
+  // Пальмы на фоне
+  const palmPositions = [60, 200, 420, 650, 850];
+  palmPositions.forEach(x => {
+    const sc = Phaser.Math.FloatBetween(0.7, 1.1);
+    scene.add.image(x, groundY - 10, 'palm_tree')
+      .setOrigin(0.5, 1).setScale(sc).setDepth(-2).setAlpha(0.9);
+  });
+
+  // Зонтик (правая часть карты)
+  scene.add.image(GAME_W - 130, groundY - 5, 'beach_umbrella')
+    .setOrigin(0.5, 1).setScale(1.1).setDepth(-1);
+
+  // Ракушки и морские звёзды вдоль земли
+  for (let x = 30; x < GAME_W - 30; x += Phaser.Math.Between(60, 140)) {
+    const img = scene.add.image(x, groundY - 2, 'shell')
+      .setOrigin(0.5, 1).setDepth(-2).setScale(Phaser.Math.FloatBetween(0.7, 1.2))
+      .setAngle(Phaser.Math.Between(-30, 30));
+    decorItems.push({ img, speed: 0, phase: 0 }); // ракушки не качаются
+  }
+  for (let x = 80; x < GAME_W - 80; x += Phaser.Math.Between(120, 200)) {
+    scene.add.image(x, groundY - 3, 'starfish_bonus')
+      .setOrigin(0.5, 1).setDepth(-2).setScale(0.6).setAlpha(0.8);
+  }
+
+  return decorItems;
+}
+
+// ============================
 //  Запуск игры
 // ============================
 const config = {
@@ -2009,7 +2478,7 @@ const config = {
     default: 'arcade',
     arcade: { gravity: { y: 600 }, debug: false }
   },
-  scene: [BootScene, MenuScene, GameScene, LevelCompleteScene, VictoryScene, NameInputScene, LeaderboardScene]
+  scene: [BootScene, MenuScene, LevelSelectScene, GameScene, LevelCompleteScene, VictoryScene, NameInputScene, LeaderboardScene]
 };
 
 const game = new Phaser.Game(config);
