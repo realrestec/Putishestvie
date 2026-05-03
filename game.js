@@ -465,20 +465,27 @@ class VictoryScene extends Phaser.Scene {
     const girl = this.add.image(GAME_W / 2 + 220, GAME_H / 2 + 20, 'girl_win').setScale(1.0);
     this.tweens.add({ targets: girl, y: girl.y - 15, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
-    const btn = this.add.text(GAME_W / 2, GAME_H / 2 + 135, '▶  Нажми любую клавишу  ◀', {
-      fontSize: '22px', fill: '#fff', stroke: '#000', strokeThickness: 3
+    const hint1 = this.add.text(GAME_W / 2, GAME_H / 2 + 120, 'Enter — таблица рекордов', {
+      fontSize: '19px', fill: '#aaddff', stroke: '#000', strokeThickness: 2
     }).setOrigin(0.5);
-    this.tweens.add({ targets: btn, alpha: 0.2, duration: 600, yoyo: true, repeat: -1 });
+    const hint2 = this.add.text(GAME_W / 2, GAME_H / 2 + 148, 'Пробел / Escape — играть снова', {
+      fontSize: '19px', fill: '#aaffaa', stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5);
+    this.tweens.add({ targets: [hint1, hint2], alpha: 0.3, duration: 700, yoyo: true, repeat: -1 });
 
-    const next = () => {
-      if (isNewRecord(this.finalScore)) {
-        this.scene.start('NameInput', { score: this.finalScore });
-      } else {
-        this.scene.start('Leaderboard', { score: this.finalScore });
+    this.input.keyboard.on('keydown', e => {
+      if (e.key === 'Enter') {
+        this.input.keyboard.removeAllListeners();
+        if (isNewRecord(this.finalScore)) {
+          this.scene.start('NameInput', { score: this.finalScore });
+        } else {
+          this.scene.start('Leaderboard', { score: this.finalScore });
+        }
+      } else if (e.key === ' ' || e.key === 'Escape') {
+        this.input.keyboard.removeAllListeners();
+        this.scene.start('LevelSelect');
       }
-    };
-    this.input.keyboard.once('keydown', next);
-    this.input.once('pointerdown', next);
+    });
   }
 }
 
@@ -525,12 +532,17 @@ class NameInputScene extends Phaser.Scene {
       callback: () => { this._cursor = !this._cursor; this._refresh(); }
     });
 
-    this.add.text(GAME_W / 2, GAME_H / 2 + 105, 'Enter — сохранить', {
+    this.add.text(GAME_W / 2, GAME_H / 2 + 100, 'Enter — сохранить', {
       fontSize: '18px', fill: '#aaaaff', stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5);
+    this.add.text(GAME_W / 2, GAME_H / 2 + 125, 'Escape — пропустить и играть снова', {
+      fontSize: '15px', fill: '#88cc88', stroke: '#000', strokeThickness: 2
     }).setOrigin(0.5);
 
     this.input.keyboard.on('keydown', e => {
-      if (e.key === 'Enter') {
+      if (e.key === 'Escape') {
+        this.scene.start('LevelSelect');
+      } else if (e.key === 'Enter') {
         this._submit();
       } else if (e.key === 'Backspace') {
         this._name = this._name.slice(0, -1);
@@ -1593,19 +1605,31 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setScrollFactor(0).setDepth(12);
 
     const isRecord = isNewRecord(this.score);
-    const hint = isRecord ? '🏆 Новый рекорд! Нажми любую клавишу' : '▶  Нажми любую клавишу  ◀';
-    const hintColor = isRecord ? '#FFD700' : '#ffffff';
+    if (isRecord) {
+      this.add.text(GAME_W / 2, GAME_H / 2 + 50, '🏆 Новый рекорд!', {
+        fontSize: '22px', fill: '#FFD700', stroke: '#000', strokeThickness: 3
+      }).setOrigin(0.5).setScrollFactor(0).setDepth(12);
+    }
 
-    const btn = this.add.text(GAME_W / 2, GAME_H / 2 + 65, hint, {
-      fontSize: '20px', fill: hintColor, stroke: '#000', strokeThickness: 3
+    const hint1 = this.add.text(GAME_W / 2, GAME_H / 2 + 85, 'Enter — таблица рекордов', {
+      fontSize: '18px', fill: '#aaddff', stroke: '#000', strokeThickness: 2
     }).setOrigin(0.5).setScrollFactor(0).setDepth(12);
-    this.tweens.add({ targets: btn, alpha: 0.2, duration: 600, yoyo: true, repeat: -1 });
+    const hint2 = this.add.text(GAME_W / 2, GAME_H / 2 + 112, 'Пробел / Escape — играть снова', {
+      fontSize: '18px', fill: '#aaffaa', stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(12);
+    this.tweens.add({ targets: [hint1, hint2], alpha: 0.35, duration: 700, yoyo: true, repeat: -1 });
 
-    this.input.keyboard.once('keydown', () => {
-      if (isNewRecord(this.score)) {
-        this.scene.start('NameInput', { score: this.score });
-      } else {
-        this.scene.start('Leaderboard', { score: this.score });
+    this.input.keyboard.on('keydown', e => {
+      if (e.key === 'Enter') {
+        this.input.keyboard.removeAllListeners();
+        if (isNewRecord(this.score)) {
+          this.scene.start('NameInput', { score: this.score });
+        } else {
+          this.scene.start('Leaderboard', { score: this.score });
+        }
+      } else if (e.key === ' ' || e.key === 'Escape') {
+        this.input.keyboard.removeAllListeners();
+        this.scene.start('LevelSelect');
       }
     });
   }
