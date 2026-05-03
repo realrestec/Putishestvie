@@ -56,6 +56,7 @@ class BootScene extends Phaser.Scene {
     drawStarfishBonus(this);
     drawCrab(this);
     drawCrabB(this);
+    drawOctopus(this);
     drawBeachUmbrella(this);
     drawSupBoard(this);
     drawJumpingFish(this);
@@ -723,7 +724,11 @@ class GameScene extends Phaser.Scene {
     // Движущаяся платформа — статическое тело, позиция обновляется вручную
     const mpd = levelData.movingPlatform;
     this.movingPlatform = this.physics.add.staticImage(mpd.x, mpd.y, platKey);
-    this.movingPlatform.setTint(isBeach ? 0x88ccff : 0xffdd88);
+    this.movingPlatform.setTint(isBeach ? 0x44AAFF : 0xFF9900);
+    // Стрелочки-подсказка чтобы отличать движущуюся от статичных
+    this._mpArrow = this.add.text(mpd.x, mpd.y, '◀ ▶', {
+      fontSize: '13px', fill: '#ffffff', stroke: '#000', strokeThickness: 2
+    }).setOrigin(0.5).setDepth(1);
     this.movingPlatform._minX     = mpd.minX;
     this.movingPlatform._maxX     = mpd.maxX;
     this.movingPlatform._speed    = mpd.speed;
@@ -735,6 +740,11 @@ class GameScene extends Phaser.Scene {
     this.girl.setBounce(0.1);
     this.girl.setCollideWorldBounds(true);
     this.girl.body.setSize(28, 90);   // физическое тело чуть меньше картинки 80×100
+    // Яркий игровой вид: насыщенность + яркость + тонкий контур
+    if (this.girl.preFX) {
+      this.girl.preFX.addColorMatrix().saturate(0.9).brightness(1.4);
+      this.girl.preFX.addGlow(0xffffff, 3, 0.3);
+    }
 
     this.turtleSpeed   = levelData.turtleSpeed;
     this.hedgehogSpeed = levelData.hedgehogSpeed;
@@ -765,6 +775,10 @@ class GameScene extends Phaser.Scene {
     // Капибары — бонусные существа, падают сверху
     this.capybaras = this.physics.add.group();
 
+    // Осьминоги (только пляж) — стоят на месте и кидают яблоки в игрока
+    this.octopusGroup  = this.physics.add.group();
+    this.octopusApples = this.physics.add.group();
+
     // Пикапы (зелья и яблоки) — динамический спавн
     this.pickupItems = this.physics.add.group();
 
@@ -782,10 +796,16 @@ class GameScene extends Phaser.Scene {
     this.physics.add.collider(this.capybaras, this.ground);
     this.physics.add.collider(this.capybaras, this.platforms);
 
+    this.physics.add.collider(this.octopusGroup, this.ground);
+    this.physics.add.collider(this.octopusGroup, this.platforms);
+    this.physics.add.collider(this.octopusApples, this.ground,     (a) => { if (a.active) a.destroy(); });
+    this.physics.add.collider(this.octopusApples, this.platforms,  (a) => { if (a.active) a.destroy(); });
+
     this.physics.add.collider(this.girl,      this.movingPlatform);
     this.physics.add.collider(this.turtles,   this.movingPlatform);
     this.physics.add.collider(this.hedgehogs, this.movingPlatform);
     this.physics.add.collider(this.capybaras, this.movingPlatform);
+    this.physics.add.collider(this.octopusGroup,  this.movingPlatform);
     this.physics.add.collider(this.appleGroup, this.movingPlatform, (apple) => {
       if (apple.active) apple.destroy();
     });
@@ -835,6 +855,29 @@ class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.girl, this.capybaras, (girl, capy) => {
       if (!capy.active) return;
       this.collectCapybara(capy);
+    });
+
+    // Яблоко игрока → осьминог
+    this.physics.add.overlap(this.appleGroup, this.octopusGroup, (apple, octo) => {
+      apple.destroy();
+      this.killEnemy(octo, 'octopus');
+    });
+    // Девочка → осьминог (прыжок убивает, боком — урон)
+    this.physics.add.overlap(this.girl, this.octopusGroup, (girl, octo) => {
+      if (this.levelOver || this.isInvincible) return;
+      if (girl.body.velocity.y > 0 && girl.y < octo.y - 10) {
+        this.killEnemy(octo, 'octopus');
+        girl.setVelocityY(-350);
+        this.shrinkGirl();
+      } else {
+        this.hurtGirl();
+      }
+    });
+    // Яблоко осьминога → девочка
+    this.physics.add.overlap(this.octopusApples, this.girl, (apple, girl) => {
+      if (this.levelOver || this.isInvincible) return;
+      apple.destroy();
+      this.hurtGirl();
     });
 
     // Девочка → пикап (зелье или яблоко)
@@ -902,6 +945,11 @@ class GameScene extends Phaser.Scene {
       SoundFX.startBeachAmbient();
       SoundFX.startBeachMusic();
       SoundFX.startSeagulls();
+      // 2 осьминога — появляются через несколько секунд
+      this.time.delayedCall(3000,  () => this.spawnOctopus(Phaser.Math.Between(120, 380)));
+      this.time.delayedCall(5000,  () => this.spawnOctopus(Phaser.Math.Between(560, 840)));
+      // Таймер бросков — каждые 3 секунды
+      this.time.addEvent({ delay: 3000, loop: true, callback: this.octopusThrowUpdate, callbackScope: this });
     } else {
       this.decorList = spawnGroundDecor(this);
     }
@@ -1326,6 +1374,47 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  spawnOctopus(x) {
+    if (this.levelOver) return;
+    const octo = this.octopusGroup.create(x, -40, 'octopus');
+    octo.setCollideWorldBounds(true);
+    // Небольшое покачивание (tween обновит y после приземления)
+    this.time.delayedCall(1500, () => {
+      if (!octo.active) return;
+      this.tweens.add({
+        targets: octo, y: octo.y - 8,
+        duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
+      });
+    });
+  }
+
+  octopusThrowUpdate() {
+    if (this.levelOver || !this.girl || !this.girl.active) return;
+    this.octopusGroup.children.iterate(octo => {
+      if (!octo || !octo.active) return;
+      const dx = this.girl.x - octo.x;
+      const dy = this.girl.y - octo.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > 520) return;
+      // Бросок яблока по параболе в сторону игрока
+      const speed = 210;
+      const vx = (dx / dist) * speed;
+      const vy = (dy / dist) * speed - 160;
+      const apple = this.octopusApples.create(octo.x, octo.y - 22, 'apple');
+      apple.setTint(0xCC66FF);
+      apple.setVelocity(vx, vy);
+      apple.setGravityY(320);
+      apple.setCollideWorldBounds(false);
+      this.time.delayedCall(3500, () => { if (apple.active) apple.destroy(); });
+      // Осьминог сжимается при броске
+      this.tweens.add({
+        targets: octo, scaleX: 1.35, scaleY: 0.65, duration: 100,
+        yoyo: true, repeat: 1
+      });
+      SoundFX.throwFX();
+    });
+  }
+
   collectCapybara(capy) {
     if (capy._walkTimer) capy._walkTimer.remove();
     capy.destroy();
@@ -1616,6 +1705,7 @@ class GameScene extends Phaser.Scene {
       });
     }
     mp.refreshBody();
+    if (this._mpArrow) this._mpArrow.x = mp.x;
 
     // Перевозим игрока: используем физические границы тел
     const onTop = this.girl.body.blocked.down
@@ -2546,6 +2636,73 @@ function drawCrabB(scene) {
   g.fillStyle(0xffffff); g.fillEllipse(29,44,9,2.5);
 
   g.generateTexture('crab_b', 58, 50);
+  g.destroy();
+}
+
+function drawOctopus(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+
+  // Щупальца (8 штук — по 4 с каждой стороны, видны снизу)
+  g.fillStyle(0x7744AA);
+  // Левые
+  g.fillEllipse(8,  46, 10, 24);
+  g.fillEllipse(15, 50, 10, 20);
+  g.fillEllipse(22, 53, 9,  18);
+  g.fillEllipse(4,  52, 8,  16);
+  // Правые
+  g.fillEllipse(50, 46, 10, 24);
+  g.fillEllipse(43, 50, 10, 20);
+  g.fillEllipse(36, 53, 9,  18);
+  g.fillEllipse(54, 52, 8,  16);
+
+  // Кончики щупалец (чуть светлее)
+  g.fillStyle(0x9966CC);
+  [8, 15, 22, 4].forEach(x  => g.fillCircle(x,  57, 5));
+  [50, 43, 36, 54].forEach(x => g.fillCircle(x, 57, 5));
+
+  // Тело — большой круглый blob
+  g.fillStyle(0x9966CC);
+  g.fillEllipse(29, 28, 48, 42);
+
+  // Голова (верхняя полусфера — чуть светлее)
+  g.fillStyle(0xAA77DD);
+  g.fillEllipse(29, 20, 40, 28);
+
+  // Блик
+  g.fillStyle(0xCC99FF);
+  g.fillEllipse(22, 13, 20, 13);
+
+  // Щёчки (румянец — сплошной, без alpha)
+  g.fillStyle(0xFF99CC);
+  g.fillCircle(14, 31, 7);
+  g.fillCircle(44, 31, 7);
+
+  // Белки глаз
+  g.fillStyle(0xFFFFFF);
+  g.fillCircle(20, 25, 10);
+  g.fillCircle(38, 25, 10);
+
+  // Зрачки
+  g.fillStyle(0x222244);
+  g.fillCircle(21, 26, 7);
+  g.fillCircle(39, 26, 7);
+
+  // Блики в глазах
+  g.fillStyle(0xFFFFFF);
+  g.fillCircle(24, 23, 3);
+  g.fillCircle(42, 23, 3);
+
+  // Рот — улыбка
+  g.fillStyle(0x553366);
+  g.fillEllipse(29, 36, 18, 9);
+  g.fillStyle(0xFF88BB);
+  g.fillEllipse(29, 35, 14, 6);
+  // Зубки
+  g.fillStyle(0xFFFFFF);
+  g.fillRect(23, 34, 5, 4);
+  g.fillRect(30, 34, 5, 4);
+
+  g.generateTexture('octopus', 58, 62);
   g.destroy();
 }
 
