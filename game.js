@@ -942,6 +942,10 @@ class GameScene extends Phaser.Scene {
       // 2 осьминога — появляются через несколько секунд
       this.time.delayedCall(3000,  () => this.spawnOctopus(Phaser.Math.Between(120, 380)));
       this.time.delayedCall(5000,  () => this.spawnOctopus(Phaser.Math.Between(560, 840)));
+      // Новые осьминоги каждые 30 секунд
+      this.time.addEvent({ delay: 30000, loop: true, callback: () => {
+        if (!this.levelOver) this.spawnOctopus(Phaser.Math.Between(80, GAME_W - 80));
+      }});
       // Таймер бросков — каждые 3 секунды
       this.time.addEvent({ delay: 3000, loop: true, callback: this.octopusThrowUpdate, callbackScope: this });
     } else {
@@ -1435,11 +1439,12 @@ class GameScene extends Phaser.Scene {
   // Убить любого врага с эффектом
   killEnemy(enemy, type) {
     if (this.levelOver) return;
-    this.score += 10;
+    const pts = type === 'octopus' ? 20 : 10;
+    this.score += pts;
     this.scoreText.setText('Очки: ' + this.score);
 
     SoundFX.hitFX();
-    const boom = this.add.text(enemy.x, enemy.y - 20, '✨+10', {
+    const boom = this.add.text(enemy.x, enemy.y - 20, `✨+${pts}`, {
       fontSize: '18px', fill: '#ffff00', stroke: '#000', strokeThickness: 2
     });
     this.tweens.add({
