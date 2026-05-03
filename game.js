@@ -725,23 +725,27 @@ class GameScene extends Phaser.Scene {
     this.turtleSpeed   = levelData.turtleSpeed;
     this.hedgehogSpeed = levelData.hedgehogSpeed;
 
-    // Черепашки
+    // На пляже — крабики; в лесу — черепашки и ёжики
+    const enemyTex = isBeach ? 'crab' : 'turtle';
+
     this.turtles = this.physics.add.group();
     levelData.turtles.forEach(pos => {
-      const t = this.turtles.create(pos.x, pos.y, 'turtle');
+      const t = this.turtles.create(pos.x, pos.y, enemyTex);
       t.setVelocityX(Phaser.Math.RND.pick([-this.turtleSpeed, this.turtleSpeed]));
       t.setBounceX(1);
       t.setCollideWorldBounds(true);
     });
 
-    // Ёжики
+    // Ёжики — только в лесу
     this.hedgehogs = this.physics.add.group();
-    (levelData.hedgehogs || []).forEach(pos => {
-      const h = this.hedgehogs.create(pos.x, pos.y, 'hedgehog');
-      h.setVelocityX(Phaser.Math.RND.pick([-this.hedgehogSpeed, this.hedgehogSpeed]));
-      h.setBounceX(1);
-      h.setCollideWorldBounds(true);
-    });
+    if (!isBeach) {
+      (levelData.hedgehogs || []).forEach(pos => {
+        const h = this.hedgehogs.create(pos.x, pos.y, 'hedgehog');
+        h.setVelocityX(Phaser.Math.RND.pick([-this.hedgehogSpeed, this.hedgehogSpeed]));
+        h.setBounceX(1);
+        h.setCollideWorldBounds(true);
+      });
+    }
 
     // Капибары — бонусные существа, падают сверху
     this.capybaras = this.physics.add.group();
@@ -2244,31 +2248,38 @@ function drawShell(scene) {
 
 function drawBeachBackground(scene) {
   const g = scene.make.graphics({ x: 0, y: 0, add: false });
-  // Небо — тёплый голубой
-  g.fillGradientStyle(0x87CEEB, 0x87CEEB, 0xFFE4B5, 0xFFE4B5, 1);
-  g.fillRect(0, 0, GAME_W, GAME_H);
-  // Солнце
-  g.fillStyle(0xFFD700, 0.85);
-  g.fillCircle(820, 70, 48);
-  g.fillStyle(0xFFE86A, 0.4);
-  g.fillCircle(820, 70, 64);
-  // Море — несколько слоёв глубины
-  g.fillStyle(0x1E90FF, 0.55); g.fillRect(0, 280, GAME_W, 140);
-  g.fillStyle(0x00BFFF, 0.5);  g.fillRect(0, 310, GAME_W, 120);
-  g.fillStyle(0x40D0FF, 0.45); g.fillRect(0, 340, GAME_W, 100);
-  // Волны — белые гребни
-  for (let wx = 0; wx < GAME_W; wx += 90) {
-    g.fillStyle(0xffffff, 0.3);
-    g.fillEllipse(wx + 45, 355, 80, 10);
-  }
-  for (let wx = 45; wx < GAME_W; wx += 90) {
-    g.fillStyle(0xffffff, 0.2);
-    g.fillEllipse(wx + 40, 375, 70, 8);
-  }
-  // Линия горизонта / пляж
-  g.fillStyle(0xF4C66A, 1); g.fillRect(0, 410, GAME_W, GAME_H - 410);
-  // Влажный песок у воды (темнее)
-  g.fillStyle(0xD4A840, 0.7); g.fillRect(0, 410, GAME_W, 30);
+
+  // Небо — полосы для имитации градиента (без альфы — работает стабильно)
+  const skyBands = [
+    [0, 70,  0x5EC8F5],
+    [70, 70, 0x70CCF0],
+    [140, 70,0x87CEEB],
+    [210, 70,0xA8D8D8],
+    [280, 20,0xC4DFCC],
+  ];
+  skyBands.forEach(([y, h, c]) => { g.fillStyle(c); g.fillRect(0, y, GAME_W, h); });
+
+  // Солнце (сплошные круги без альфы)
+  g.fillStyle(0xFFEE66); g.fillCircle(820, 68, 62); // ореол
+  g.fillStyle(0xFFD700); g.fillCircle(820, 68, 48); // основной
+  g.fillStyle(0xFFF5A0); g.fillCircle(820, 68, 28); // яркий центр
+
+  // Море — три сплошных слоя
+  g.fillStyle(0x5BB8E8); g.fillRect(0, 300, GAME_W, 130);
+  g.fillStyle(0x3FA0D8); g.fillRect(0, 325, GAME_W, 105);
+  g.fillStyle(0x2A8CC0); g.fillRect(0, 355, GAME_W, 70);
+
+  // Волны — светло-голубые эллипсы (сплошные)
+  g.fillStyle(0xAADFF8);
+  for (let wx = 0; wx < GAME_W; wx += 88) g.fillEllipse(wx + 44, 353, 72, 8);
+  g.fillStyle(0xCCEEFF);
+  for (let wx = 44; wx < GAME_W; wx += 88) g.fillEllipse(wx + 40, 372, 58, 6);
+
+  // Песок — тёплый жёлтый
+  g.fillStyle(0xF5D06A); g.fillRect(0, 410, GAME_W, GAME_H - 410);
+  // Полоска влажного песка у кромки воды
+  g.fillStyle(0xD8A840); g.fillRect(0, 410, GAME_W, 18);
+
   g.generateTexture('beach_bg', GAME_W, GAME_H);
   g.destroy();
 }
@@ -2308,32 +2319,79 @@ function drawBeachPlatform(scene) {
 
 function drawCrab(scene) {
   const g = scene.make.graphics({ x: 0, y: 0, add: false });
-  // Ноги (6 штук, по 3 с каждой стороны)
+
+  // === НОГИ (3 пары, выходят вниз-в стороны) ===
   g.fillStyle(0xCC4411);
-  [[-18,14,8,7],[-20,19,8,6],[-17,24,9,6]].forEach(([x,y,w,h]) => g.fillEllipse(x,y,w,h));
-  [[58,14,8,7],[60,19,8,6],[57,24,9,6]].forEach(([x,y,w,h]) => g.fillEllipse(x,y,w,h));
-  // Клешни
-  g.fillStyle(0xFF5522);
-  // Левая клешня (вперёд)
-  g.fillTriangle(-2, 8, -14, 2, -14, 16);
-  g.fillCircle(-10, 9, 6);
-  // Правая клешня (назад)
-  g.fillTriangle(42, 10, 54, 5, 54, 18);
-  g.fillCircle(49, 12, 5);
-  // Тело
-  g.fillStyle(0xFF6633); g.fillEllipse(20, 18, 36, 24);
-  g.fillStyle(0xFF8855); g.fillEllipse(20, 17, 28, 16);
+  // Левые ноги
+  g.fillPoints([{x:13,y:32},{x:10,y:30},{x:2,y:30},{x:4,y:34}],  true); // передняя
+  g.fillPoints([{x:12,y:36},{x:9,y:34},{x:1,y:38},{x:3,y:42}],   true); // средняя
+  g.fillPoints([{x:13,y:40},{x:10,y:40},{x:4,y:47},{x:7,y:47}],  true); // задняя
+  // Правые ноги
+  g.fillPoints([{x:45,y:32},{x:48,y:30},{x:56,y:30},{x:54,y:34}], true);
+  g.fillPoints([{x:46,y:36},{x:49,y:34},{x:57,y:38},{x:55,y:42}], true);
+  g.fillPoints([{x:45,y:40},{x:48,y:40},{x:54,y:47},{x:51,y:47}], true);
+
+  // Коготки на концах ног
+  g.fillStyle(0xAA2200);
+  [[2,30],[1,38],[4,47]].forEach(([x,y]) => g.fillCircle(x,y,2));
+  [[56,30],[57,38],[54,47]].forEach(([x,y]) => g.fillCircle(x,y,2));
+
+  // === РУКИ КЛЕШНЕЙ — поднятые вверх ===
+  g.fillStyle(0xDD4400);
+  // Левая рука: от тела вверх-влево
+  g.fillPoints([{x:14,y:30},{x:10,y:28},{x:5,y:14},{x:9,y:14}], true);
+  // Правая рука: от тела вверх-вправо
+  g.fillPoints([{x:44,y:30},{x:48,y:28},{x:53,y:14},{x:49,y:14}], true);
+
+  // === КЛЕШНИ (острые зубцы смотрят вверх) ===
+  // Шары клешней
+  g.fillStyle(0xFF5522); g.fillCircle(7,  14, 8);
+  g.fillStyle(0xFF5522); g.fillCircle(51, 14, 8);
+  // Блик на шарах
+  g.fillStyle(0xFF8866); g.fillCircle(6,  12, 4);
+  g.fillStyle(0xFF8866); g.fillCircle(50, 12, 4);
+
+  // Острые зубцы — два прона на каждой клешне, торчат ВВЕРХ
+  g.fillStyle(0xFF3300);
+  // Левая клешня: внутренний зубец
+  g.fillTriangle(3, 10, 6, 10, 3,  1);
+  // Левая клешня: внешний зубец
+  g.fillTriangle(6, 10, 10, 10, 10, 2);
+  // Правая клешня: внутренний зубец
+  g.fillTriangle(55, 10, 52, 10, 55, 1);
+  // Правая клешня: внешний зубец
+  g.fillTriangle(52, 10, 48, 10, 48, 2);
+
+  // Тёмный контур зубцов (острее выглядят)
+  g.fillStyle(0xBB2200);
+  g.fillTriangle(3, 10, 5, 10, 3,  2);
+  g.fillTriangle(7, 10, 10, 10, 9, 3);
+  g.fillTriangle(55, 10, 53, 10, 55, 2);
+  g.fillTriangle(51, 10, 48, 10, 49, 3);
+
+  // === ТЕЛО ===
+  g.fillStyle(0xFF6633); g.fillEllipse(29, 36, 36, 24);
+  // Панцирь (светлее)
+  g.fillStyle(0xFF8850); g.fillEllipse(29, 34, 28, 16);
+  // Узор панциря
+  g.fillStyle(0xDD5522, 0.6);
+  g.fillEllipse(22, 34, 8, 10); g.fillEllipse(29, 32, 8, 10); g.fillEllipse(36, 34, 8, 10);
   // Брюшко
-  g.fillStyle(0xFFAA77); g.fillEllipse(20, 22, 22, 10);
-  // Глаза на стебельках
+  g.fillStyle(0xFFAA77); g.fillEllipse(29, 42, 22, 10);
+
+  // === ГЛАЗА НА СТЕБЕЛЬКАХ ===
   g.fillStyle(0xCC4411);
-  g.fillRect(12, 5, 3, 6); g.fillRect(22, 5, 3, 6);
-  g.fillStyle(0x111111); g.fillCircle(13, 4, 4); g.fillCircle(23, 4, 4);
-  g.fillStyle(0xffffff); g.fillCircle(14, 3, 1.5); g.fillCircle(24, 3, 1.5);
-  // Рот
-  g.fillStyle(0xCC4411); g.fillEllipse(20, 26, 12, 4);
-  g.fillStyle(0xffffff); g.fillEllipse(20, 25, 8, 2);
-  g.generateTexture('crab', 42, 32);
+  g.fillRect(21, 23, 3, 9); g.fillRect(34, 23, 3, 9); // стебельки
+  g.fillStyle(0x111111); g.fillCircle(22, 21, 5); g.fillCircle(36, 21, 5);
+  g.fillStyle(0xffffff); g.fillCircle(23, 19, 2); g.fillCircle(37, 19, 2);
+  // Зрачки
+  g.fillStyle(0x000000); g.fillCircle(23, 20, 1); g.fillCircle(37, 20, 1);
+
+  // === РОТ (довольный) ===
+  g.fillStyle(0xCC4411); g.fillEllipse(29, 45, 14, 5);
+  g.fillStyle(0xffffff); g.fillEllipse(29, 44, 9, 2.5);
+
+  g.generateTexture('crab', 58, 50);
   g.destroy();
 }
 
