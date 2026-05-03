@@ -740,10 +740,9 @@ class GameScene extends Phaser.Scene {
     this.girl.setBounce(0.1);
     this.girl.setCollideWorldBounds(true);
     this.girl.body.setSize(28, 90);   // физическое тело чуть меньше картинки 80×100
-    // Яркий игровой вид: насыщенность + яркость + тонкий контур
+    // Яркий игровой вид: насыщенность + яркость
     if (this.girl.preFX) {
       this.girl.preFX.addColorMatrix().saturate(0.9).brightness(1.4);
-      this.girl.preFX.addGlow(0xffffff, 3, 0.3);
     }
 
     this.turtleSpeed   = levelData.turtleSpeed;
