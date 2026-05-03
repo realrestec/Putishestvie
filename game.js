@@ -1394,14 +1394,10 @@ class GameScene extends Phaser.Scene {
     if (this.levelOver) return;
     const octo = this.octopusGroup.create(x, -40, 'octopus');
     octo.setCollideWorldBounds(true);
-    // Небольшое покачивание (tween обновит y после приземления)
-    this.time.delayedCall(1500, () => {
-      if (!octo.active) return;
-      this.tweens.add({
-        targets: octo, y: octo.y - 8,
-        duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
-      });
-    });
+    octo.setBounceX(1);
+    const spd = Phaser.Math.Between(40, 80);
+    octo.setVelocityX(Phaser.Math.RND.pick([-spd, spd]));
+    octo._walkSpeed = spd;
   }
 
   octopusThrowUpdate() {
@@ -1760,6 +1756,11 @@ class GameScene extends Phaser.Scene {
       if (!c) return;
       if (c.x <= 32) c.setVelocityX(Math.abs(c.body.velocity.x));
       if (c.x >= GAME_W - 32) c.setVelocityX(-Math.abs(c.body.velocity.x));
+    });
+    this.octopusGroup.children.iterate(o => {
+      if (!o) return;
+      if (o.x <= 32) o.setVelocityX(Math.abs(o.body.velocity.x));
+      if (o.x >= GAME_W - 32) o.setVelocityX(-Math.abs(o.body.velocity.x));
     });
 
     // Анимация волн (пляж)
