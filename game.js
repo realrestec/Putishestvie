@@ -47,6 +47,7 @@ class BootScene extends Phaser.Scene {
     drawHedgehog(this);
     drawCapybara(this);
     drawPlane(this);
+    drawBalloon(this);
     drawPotion(this);
     drawApple(this);
     drawPlatform(this);
@@ -776,6 +777,8 @@ class GameScene extends Phaser.Scene {
 
     // Самолёт — ~3 раза за уровень
     this.spawnPlaneFlights();
+    // Воздушный шар — каждые 2 минуты
+    this.time.delayedCall(Phaser.Math.Between(15000, 30000), () => this.scheduleBalloon());
 
     // Первая капибара через 5 сек, потом каждые 8-14 сек
     this.scheduleCapybara(5000);
@@ -865,6 +868,35 @@ class GameScene extends Phaser.Scene {
       alpha: 1,
       duration: 10000,
       ease: 'Sine.easeInOut'
+    });
+  }
+
+  scheduleBalloon() {
+    if (this.levelOver) return;
+    this.flyBalloon();
+    this.time.delayedCall(120000, () => this.scheduleBalloon());
+  }
+
+  flyBalloon() {
+    const fromLeft = Phaser.Math.RND.frac() > 0.5;
+    const startX   = fromLeft ? -70 : GAME_W + 70;
+    const endX     = fromLeft ? GAME_W + 70 : -70;
+    const y        = Phaser.Math.Between(40, 130);
+    const duration = Phaser.Math.Between(22000, 34000);
+
+    const balloon = this.add.image(startX, y, 'balloon')
+      .setScrollFactor(0).setDepth(-1).setFlipX(!fromLeft);
+
+    // Лёгкое покачивание
+    this.tweens.add({
+      targets: balloon, y: y + 12,
+      duration: Phaser.Math.Between(1800, 2600),
+      yoyo: true, repeat: -1, ease: 'Sine.easeInOut'
+    });
+
+    this.tweens.add({
+      targets: balloon, x: endX, duration, ease: 'Linear',
+      onComplete: () => balloon.destroy()
     });
   }
 
@@ -1653,6 +1685,77 @@ function drawHedgehog(scene) {
   g.fillRoundedRect(25, 28, 6, 7, 2);
 
   g.generateTexture('hedgehog', 38, 36);
+  g.destroy();
+}
+
+function drawBalloon(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+
+  // Шар — большой красочный купол
+  const colors = [0xff4444, 0xff8800, 0xffdd00, 0x44cc44, 0x4488ff, 0xcc44ff];
+  // Сегменты (6 вертикальных долек)
+  for (let i = 0; i < 6; i++) {
+    g.fillStyle(colors[i]);
+    g.fillTriangle(
+      30, 58,
+      30 + Math.cos(((i - 0.5) / 6) * Math.PI * 2) * 28,
+      30 + Math.sin(((i - 0.5) / 6) * Math.PI * 2) * 28,
+      30 + Math.cos(((i + 0.5) / 6) * Math.PI * 2) * 28,
+      30 + Math.sin(((i + 0.5) / 6) * Math.PI * 2) * 28
+    );
+  }
+  // Основной круг поверх
+  g.fillStyle(0xff4444);
+  g.fillCircle(30, 28, 28);
+  // Сегменты-дольки поверх круга
+  for (let i = 0; i < 6; i++) {
+    const a1 = (i / 6) * Math.PI * 2 - Math.PI / 2;
+    const a2 = ((i + 1) / 6) * Math.PI * 2 - Math.PI / 2;
+    const mx = 30 + Math.cos((a1 + a2) / 2) * 14;
+    const my = 28 + Math.sin((a1 + a2) / 2) * 14;
+    g.fillStyle(colors[i]);
+    // Дольки — полосы по кругу
+    g.fillPoints([
+      { x: 30, y: 28 },
+      { x: 30 + Math.cos(a1) * 28, y: 28 + Math.sin(a1) * 28 },
+      { x: 30 + Math.cos(a1) * 14, y: 28 + Math.sin(a1) * 14 },
+    ].concat(
+      Array.from({ length: 5 }, (_, k) => {
+        const a = a1 + (a2 - a1) * (k + 1) / 6;
+        return { x: 30 + Math.cos(a) * 28, y: 28 + Math.sin(a) * 28 };
+      })
+    ).concat([
+      { x: 30 + Math.cos(a2) * 14, y: 28 + Math.sin(a2) * 14 },
+      { x: 30 + Math.cos(a2) * 28, y: 28 + Math.sin(a2) * 28 },
+    ]), true);
+  }
+
+  // Блик
+  g.fillStyle(0xffffff, 0.35);
+  g.fillEllipse(22, 16, 14, 10);
+
+  // Нижний конус (горелка)
+  g.fillStyle(0xeecc88);
+  g.fillTriangle(22, 56, 38, 56, 30, 66);
+  g.fillStyle(0xff6600);
+  g.fillTriangle(27, 60, 33, 60, 30, 53); // огонь горелки
+
+  // Корзина
+  g.fillStyle(0xaa7733);
+  g.fillRoundedRect(20, 66, 20, 14, 3);
+  g.lineStyle(1.5, 0x7a5520);
+  g.strokeRoundedRect(20, 66, 20, 14, 3);
+  // Верёвки
+  g.lineStyle(1, 0x8b6914);
+  g.beginPath(); g.moveTo(22, 56); g.lineTo(22, 66); g.strokePath();
+  g.beginPath(); g.moveTo(38, 56); g.lineTo(38, 66); g.strokePath();
+
+  // Люди в корзине (маленькие головы)
+  g.fillStyle(0xffcc99);
+  g.fillCircle(26, 68, 3);
+  g.fillCircle(34, 68, 3);
+
+  g.generateTexture('balloon', 60, 82);
   g.destroy();
 }
 
