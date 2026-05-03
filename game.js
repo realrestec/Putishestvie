@@ -57,6 +57,9 @@ class BootScene extends Phaser.Scene {
     drawCrab(this);
     drawCrabB(this);
     drawOctopus(this);
+    drawNonLa(this);
+    drawVietnameseLantern(this);
+    drawVietnameseBoat(this);
     drawBeachUmbrella(this);
     drawSupBoard(this);
     drawJumpingFish(this);
@@ -939,6 +942,8 @@ class GameScene extends Phaser.Scene {
       SoundFX.startBeachAmbient();
       SoundFX.startBeachMusic();
       SoundFX.startSeagulls();
+      // Вьетнамская шляпа нон ла на персонаже
+      this._nonLa = this.add.image(this.girl.x, this.girl.y - 54, 'non_la').setDepth(2);
       // 2 осьминога — появляются через несколько секунд
       this.time.delayedCall(3000,  () => this.spawnOctopus(Phaser.Math.Between(120, 380)));
       this.time.delayedCall(5000,  () => this.spawnOctopus(Phaser.Math.Between(560, 840)));
@@ -1748,6 +1753,12 @@ class GameScene extends Phaser.Scene {
         cloud.y = Phaser.Math.Between(30, 110);
       }
     });
+
+    // Шляпа нон ла следует за персонажем
+    if (this._nonLa) {
+      this._nonLa.x = this.girl.x;
+      this._nonLa.y = this.girl.y - 54;
+    }
 
     // Покачивание травы и цветов от ветра (только для леса)
     this._windTime += dt;
@@ -2704,6 +2715,146 @@ function drawOctopus(scene) {
   g.destroy();
 }
 
+// Шляпа нон ла (вьетнамская конусная шляпа)
+function drawNonLa(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  const W = 52, H = 22;
+  const cx = 26;
+
+  // Основа шляпы — конус (трапеция с заострённым верхом)
+  g.fillStyle(0xD4C878);
+  g.fillTriangle(cx, 0, 2, H, W - 2, H);
+
+  // Плетёные рёбра — тёмные линии от кончика к краям
+  g.lineStyle(1, 0x9A8840, 1);
+  for (let i = 0; i <= 6; i++) {
+    const t = i / 6;
+    g.beginPath();
+    g.moveTo(cx, 1);
+    g.lineTo(2 + t * (W - 4), H);
+    g.strokePath();
+  }
+  // Горизонтальные линии текстуры плетения
+  g.lineStyle(0.8, 0xB0984A, 1);
+  [5, 9, 13, 17].forEach(y => {
+    const half = (y / H) * (cx - 2);
+    g.beginPath(); g.moveTo(cx - half, y); g.lineTo(cx + half, y); g.strokePath();
+  });
+
+  // Ободок снизу
+  g.fillStyle(0xA08030);
+  g.fillRect(2, H - 3, W - 4, 3);
+
+  // Тень под шляпой (объём)
+  g.fillStyle(0xB89840);
+  g.fillTriangle(cx, 2, cx - 6, H - 3, cx + 6, H - 3);
+
+  g.generateTexture('non_la', W, H);
+  g.destroy();
+}
+
+// Вьетнамский бумажный фонарик (đèn lồng)
+function drawVietnameseLantern(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+
+  // Шнурок вверху
+  g.fillStyle(0xAA8833);
+  g.fillRect(11, 0, 2, 5);
+
+  // Тело фонарика — красный овал
+  g.fillStyle(0xCC1111);
+  g.fillEllipse(12, 20, 20, 28);
+
+  // Золотые рёбра
+  g.fillStyle(0xFFCC00);
+  g.fillRect(10, 7,  4, 2);
+  g.fillRect(10, 13, 4, 2);
+  g.fillRect(10, 19, 4, 2);
+  g.fillRect(10, 25, 4, 2);
+  g.fillRect(10, 31, 4, 2);
+
+  // Блик (объём)
+  g.fillStyle(0xFF4444);
+  g.fillEllipse(9, 17, 7, 16);
+
+  // Золотой иероглиф 福 (fu — счастье) упрощённо
+  g.fillStyle(0xFFDD00);
+  g.fillRect(10, 15, 4, 8);
+  g.fillRect(8,  16, 8, 2);
+  g.fillRect(8,  20, 8, 2);
+
+  // Кисточка снизу
+  g.fillStyle(0xFFCC00);
+  g.fillRect(11, 34, 2, 3);
+  g.fillStyle(0xFFAA00);
+  [9, 11, 13, 15].forEach(x => g.fillRect(x, 37, 1, 4));
+
+  g.generateTexture('viet_lantern', 24, 42);
+  g.destroy();
+}
+
+// Вьетнамская рыбацкая лодка (thuyền nan)
+function drawVietnameseBoat(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+
+  // Корпус лодки — тёмное дерево, загнутые нос и корма
+  g.fillStyle(0x5C3A12);
+  g.fillPoints([
+    {x:4,y:30}, {x:0,y:22}, {x:8,y:14},
+    {x:80,y:14}, {x:88,y:22}, {x:84,y:30}
+  ], true);
+
+  // Борт (чуть светлее)
+  g.fillStyle(0x7A5020);
+  g.fillPoints([
+    {x:6,y:28}, {x:3,y:22}, {x:9,y:17},
+    {x:79,y:17}, {x:85,y:22}, {x:82,y:28}
+  ], true);
+
+  // Парус (бамбуковые рейки — традиционный азиатский)
+  g.fillStyle(0xEEDDB0);
+  g.fillTriangle(44, 0, 44, 16, 70, 16);
+  g.fillStyle(0xD4C490);
+  // Рейки паруса
+  g.lineStyle(1.5, 0xAA9050, 1);
+  [4, 7, 10, 13].forEach(y => {
+    const w = (y / 16) * 26;
+    g.beginPath(); g.moveTo(44, y); g.lineTo(44 + w, y); g.strokePath();
+  });
+
+  // Мачта
+  g.fillStyle(0x7A5020);
+  g.fillRect(43, 0, 3, 17);
+
+  // Флаг Вьетнама (красный с жёлтой звездой) на мачте
+  g.fillStyle(0xDD0000);
+  g.fillRect(46, 0, 14, 9);
+  g.fillStyle(0xFFDD00);
+  // Звезда (пятиугольник)
+  const sx = 53, sy = 4.5, sr = 3.5;
+  for (let i = 0; i < 5; i++) {
+    const a1 = (i * 2 - 0.5) * Math.PI / 5 - Math.PI / 2;
+    const a2 = (i * 2 + 0.5) * Math.PI / 5 - Math.PI / 2;
+    const a3 = (i * 2 + 1.5) * Math.PI / 5 - Math.PI / 2;
+    g.fillTriangle(
+      sx + Math.cos(a1) * sr, sy + Math.sin(a1) * sr,
+      sx + Math.cos(a2) * (sr * 0.38), sy + Math.sin(a2) * (sr * 0.38),
+      sx + Math.cos(a3) * sr, sy + Math.sin(a3) * sr
+    );
+  }
+
+  // Фигурка рыбака в нон ла (силуэт)
+  g.fillStyle(0x3A2008);
+  g.fillRect(18, 12, 5, 5); // тело
+  g.fillCircle(20, 11, 3);  // голова
+  // Нон ла у рыбака
+  g.fillStyle(0xC8B860);
+  g.fillTriangle(20, 7, 14, 11, 26, 11);
+
+  g.generateTexture('viet_boat', 90, 32);
+  g.destroy();
+}
+
 function drawStarfishBonus(scene) {
   const g = scene.make.graphics({ x: 0, y: 0, add: false });
   g.fillStyle(0xFF7F00);
@@ -2821,6 +2972,26 @@ function spawnBeachDecor(scene) {
   // Зонтик (правая часть карты)
   scene.add.image(GAME_W - 130, groundY - 5, 'beach_umbrella')
     .setOrigin(0.5, 1).setScale(1.1).setDepth(-1);
+
+  // Вьетнамские лодки на море (фон)
+  scene.add.image(160, 390, 'viet_boat').setDepth(-2).setScale(1.0);
+  scene.add.image(720, 375, 'viet_boat').setDepth(-2).setScale(0.8).setFlipX(true);
+
+  // Фонарики — висят в воздухе как украшение
+  [180, 360, 580, 780].forEach((x, i) => {
+    const y = 60 + (i % 2) * 22;
+    scene.add.image(x, y, 'viet_lantern').setDepth(0).setScale(0.9 + (i % 2) * 0.15);
+  });
+  // Верёвка между фонариками
+  const rope = scene.add.graphics().setDepth(0);
+  rope.lineStyle(1.5, 0xAA8844, 1);
+  rope.beginPath();
+  rope.moveTo(60, 55);
+  [180, 360, 580, 780, GAME_W - 60].forEach((x, i) => {
+    const y = 68 + (i % 2) * 22;
+    rope.lineTo(x, y);
+  });
+  rope.strokePath();
 
   // Ракушки и морские звёзды вдоль земли
   for (let x = 30; x < GAME_W - 30; x += Phaser.Math.Between(60, 140)) {
@@ -2975,21 +3146,27 @@ const SoundFX = (() => {
     // --- Тропическая фоновая музыка ---
     startBeachMusic() {
       if (_musicId !== null) return;
-      // C мажорная пентатоника: C4 E4 G4 A4 C5 E5 G5
-      const N = [262, 330, 392, 440, 523, 659, 784];
-      // Жизнерадостный тропический арпеджио
-      const P = [0,2,4,2, 5,4,2,0, 1,3,4,3, 6,4,3,1,
-                 0,4,2,4, 5,2,4,5, 1,3,5,3, 4,2,0,2];
+      // Вьетнамская пентатоника điệu Bắc (северный лад): D F G A C
+      // D4=293 F4=349 G4=392 A4=440 C5=523 D5=587 F5=698 A5=880
+      const N = [293, 349, 392, 440, 523, 587, 698, 880];
+      // Мелодия с характерными вьетнамскими скачками и возвратами
+      const P = [2,4,3,5, 4,2,3,2, 0,2,4,3, 5,3,2,0,
+                 4,5,4,3, 2,4,3,2, 1,3,5,4, 3,2,1,2];
       let step = 0;
-      const MS = (60 / 114) * 500; // 114 BPM, восьмые ноты ~263ms
+      const MS = 300; // ~100 BPM — плавный вьетнамский ритм
 
       const tick = () => {
         const freq = N[P[step % P.length]];
-        tone(freq, 'triangle', 0.38, 0.09);
-        // Бас на каждую долю (каждые 2 шага)
-        if (step % 2 === 0) tone(N[step % 16 < 8 ? 0 : 1] * 0.5, 'sine', 0.55, 0.06);
-        // Гармония каждые 4 шага
-        if (step % 4 === 2) tone(freq * 1.498, 'sine', 0.30, 0.035);
+        // Đàn tranh (цитра) — щипковый: sawtooth с быстрым затуханием
+        tone(freq, 'sawtooth', 0.22, 0.08);
+        // Орнамент-скольжение (glide) — характерная черта вьетнамской музыки
+        if (step % 3 === 1) tone(freq * 1.059, 'triangle', 0.14, 0.04, 0, freq);
+        // Sáo trúc (бамбуковая флейта) — тихая, на долях
+        if (step % 2 === 0) tone(freq * 2, 'sine', 0.35, 0.025);
+        // Бас-барабан тонг (trống) на каждые 4 шага
+        if (step % 4 === 0) tone(N[0] * 0.5, 'sine', 0.5, 0.055);
+        // Акцент на 3-й доле (синкопа, характерная для вьетнамской музыки)
+        if (step % 4 === 2) tone(freq * 0.749, 'triangle', 0.18, 0.03);
         step++;
       };
       tick();
