@@ -816,28 +816,30 @@ class GameScene extends Phaser.Scene {
     this.physics.add.collider(this.capybaras, this.movingPlatform);
     this.physics.add.collider(this.octopusGroup,  this.movingPlatform);
     this.physics.add.collider(this.appleGroup, this.movingPlatform, (apple) => {
-      if (apple.active) apple.destroy();
+      if (apple.active) apple.disableBody(true, true);
     });
 
     // Яблоко отскакивает от земли 3 раза, потом исчезает
     this.physics.add.collider(this.appleGroup, this.ground, (apple) => {
       if (!apple.active) return;
       apple._bounces = (apple._bounces || 0) + 1;
-      if (apple._bounces >= 3) apple.destroy();
+      if (apple._bounces >= 3) apple.disableBody(true, true);
     });
     this.physics.add.collider(this.appleGroup, this.platforms, (apple) => {
-      if (apple.active) apple.destroy();
+      if (apple.active) apple.disableBody(true, true);
     });
 
     // Яблоко → черепашка
     this.physics.add.overlap(this.appleGroup, this.turtles, (apple, turtle) => {
-      apple.destroy();
+      if (!apple.active || !turtle.active) return;
+      apple.disableBody(true, true);
       this.killEnemy(turtle, 'turtle');
     });
 
     // Яблоко → ёжик
     this.physics.add.overlap(this.appleGroup, this.hedgehogs, (apple, hedgehog) => {
-      apple.destroy();
+      if (!apple.active || !hedgehog.active) return;
+      apple.disableBody(true, true);
       this.killEnemy(hedgehog, 'hedgehog');
     });
 
@@ -868,12 +870,13 @@ class GameScene extends Phaser.Scene {
 
     // Яблоко игрока → осьминог
     this.physics.add.overlap(this.appleGroup, this.octopusGroup, (apple, octo) => {
-      apple.destroy();
+      if (!apple.active || !octo.active) return;
+      apple.disableBody(true, true);
       this.killEnemy(octo, 'octopus');
     });
     // Девочка → осьминог (прыжок убивает, боком — урон)
     this.physics.add.overlap(this.girl, this.octopusGroup, (girl, octo) => {
-      if (this.levelOver || this.isInvincible) return;
+      if (this.levelOver || this.isInvincible || !octo.active) return;
       if (girl.body.velocity.y > 0 && girl.y < octo.y - 10) {
         this.killEnemy(octo, 'octopus');
         girl.setVelocityY(-350);
@@ -1428,8 +1431,9 @@ class GameScene extends Phaser.Scene {
   }
 
   collectCapybara(capy) {
+    if (!capy.active) return;
     if (capy._walkTimer) capy._walkTimer.remove();
-    capy.destroy();
+    capy.disableBody(true, true);
 
     SoundFX.bonus();
     this.score += 20;
@@ -1465,7 +1469,7 @@ class GameScene extends Phaser.Scene {
       targets: boom, y: boom.y - 40, alpha: 0, duration: 700,
       onComplete: () => boom.destroy()
     });
-    enemy.destroy();
+    enemy.disableBody(true, true);
 
     // Бонусная жизнь каждые 50 очков
     if (this.score >= this.nextLifeMilestone) {
@@ -1542,10 +1546,13 @@ class GameScene extends Phaser.Scene {
   }
 
   hurtGirl() {
+    if (this.isInvincible || this.levelOver) return;
     this.lives--;
     this.isInvincible = true;
     this.updateLivesText();
 
+    this.tweens.killTweensOf(this.girl);
+    this.girl.setAlpha(1);
     this.tweens.add({
       targets: this.girl, alpha: 0, duration: 100, yoyo: true, repeat: 5,
       onComplete: () => { this.girl.setAlpha(1); this.isInvincible = false; }
