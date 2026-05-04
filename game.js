@@ -807,8 +807,8 @@ class GameScene extends Phaser.Scene {
 
     this.physics.add.collider(this.octopusGroup, this.ground);
     this.physics.add.collider(this.octopusGroup, this.platforms);
-    this.physics.add.collider(this.octopusApples, this.ground,     (a) => { if (a.active) a.destroy(); });
-    this.physics.add.collider(this.octopusApples, this.platforms,  (a) => { if (a.active) a.destroy(); });
+    this.physics.add.collider(this.octopusApples, this.ground,    (a) => { if (a.active) a.disableBody(true, true); });
+    this.physics.add.collider(this.octopusApples, this.platforms, (a) => { if (a.active) a.disableBody(true, true); });
 
     this.physics.add.collider(this.girl,      this.movingPlatform);
     this.physics.add.collider(this.turtles,   this.movingPlatform);
@@ -885,7 +885,7 @@ class GameScene extends Phaser.Scene {
     // Яблоко осьминога → девочка
     this.physics.add.overlap(this.octopusApples, this.girl, (apple, girl) => {
       if (!apple.active) return;
-      apple.destroy(); // уничтожаем всегда, иначе висит на игроке и зацикливает удары
+      apple.disableBody(true, true); // безопасно внутри physics-коллбека
       if (this.levelOver || this.isInvincible) return;
       this.hurtGirl();
     });
@@ -1417,7 +1417,7 @@ class GameScene extends Phaser.Scene {
       apple.setVelocity(vx, vy);
       apple.setGravityY(320);
       apple.setCollideWorldBounds(false);
-      this.time.delayedCall(3500, () => { if (apple.active) apple.destroy(); });
+      this.time.delayedCall(3500, () => { if (apple.active) apple.disableBody(true, true); });
       // Осьминог сжимается при броске
       this.tweens.add({
         targets: octo, scaleX: 1.35, scaleY: 0.65, duration: 100,
