@@ -71,6 +71,7 @@ class BootScene extends Phaser.Scene {
     drawFlowers(this);
     drawBackground(this);
     drawClouds(this);
+    drawParticles(this);
     this.scene.start('Menu');
   }
 }
@@ -755,6 +756,26 @@ class GameScene extends Phaser.Scene {
       this.girl.preFX.addColorMatrix().saturate(0.9).brightness(1.4);
     }
 
+    // === Game feel: состояние прыжка и squash & stretch ===
+    this._squash = { x: 1, y: 1 };   // множители масштаба, анимируются отдельно от размера
+    this._coyote = 0;                // мс после схода с платформы, когда прыжок ещё можно
+    this._jumpBuf = 0;               // мс буфера нажатия прыжка до приземления
+    this._wasOnGround = true;
+    this._prevVy = 0;
+    this._runDustTimer = 0;
+
+    // Частицы: пыль (прыжок/приземление/бег) и искры (враги/бонусы)
+    this._dustEmitter = this.add.particles(0, 0, 'p_dust', {
+      speed: { min: 20, max: 80 }, angle: { min: 210, max: 330 },
+      scale: { start: 1, end: 0 }, alpha: { start: 0.8, end: 0 },
+      lifespan: 400, gravityY: 180, emitting: false
+    }).setDepth(1);
+    this._sparkEmitter = this.add.particles(0, 0, 'p_spark', {
+      speed: { min: 60, max: 190 }, angle: { min: 0, max: 360 },
+      scale: { start: 1.1, end: 0 }, alpha: { start: 1, end: 0 },
+      lifespan: 550, gravityY: 350, rotate: { min: 0, max: 360 }, emitting: false
+    }).setDepth(6);
+
     this.turtleSpeed   = levelData.turtleSpeed;
     this.hedgehogSpeed = levelData.hedgehogSpeed;
 
@@ -1436,6 +1457,7 @@ class GameScene extends Phaser.Scene {
     capy.disableBody(true, true);
 
     SoundFX.bonus();
+    this._sparkEmitter.explode(10, capy.x, capy.y);
     this.score += 20;
     this.scoreText.setText('Очки: ' + this.score);
 
@@ -1462,6 +1484,8 @@ class GameScene extends Phaser.Scene {
     this.scoreText.setText('Очки: ' + this.score);
 
     SoundFX.hitFX();
+    this._sparkEmitter.explode(12, enemy.x, enemy.y);
+    this.cameras.main.shake(70, 0.004);
     const boom = this.add.text(enemy.x, enemy.y - 20, `✨+${pts}`, {
       fontSize: '18px', fill: '#ffff00', stroke: '#000', strokeThickness: 2
     });
@@ -1543,6 +1567,17 @@ class GameScene extends Phaser.Scene {
         apples: this.apples
       });
     }
+  }
+
+  // Squash & stretch: вытягивание при прыжке, сплющивание при приземлении
+  _squashTween(kind) {
+    this.tweens.killTweensOf(this._squash);
+    if (kind === 'jump') { this._squash.x = 0.82; this._squash.y = 1.18; }
+    else                 { this._squash.x = 1.22; this._squash.y = 0.78; }
+    this.tweens.add({
+      targets: this._squash, x: 1, y: 1,
+      duration: 220, ease: 'Back.easeOut'
+    });
   }
 
   hurtGirl() {
@@ -1674,19 +1709,65 @@ class GameScene extends Phaser.Scene {
 
     const onGround = this.girl.body.blocked.down;
 
+    // --- Плавный разгон/торможение (в воздухе управление слабее) ---
+    const MAX_RUN = 180, ACCEL = 1500, DECEL = 2200;
+    const airFactor = onGround ? 1 : 0.7;
+    let vx = this.girl.body.velocity.x;
     if (this.cursors.left.isDown) {
-      this.girl.setVelocityX(-180);
+      vx = Math.max(vx - ACCEL * airFactor * dt, -MAX_RUN);
       this.girl.setFlipX(true);
     } else if (this.cursors.right.isDown) {
-      this.girl.setVelocityX(180);
+      vx = Math.min(vx + ACCEL * airFactor * dt, MAX_RUN);
       this.girl.setFlipX(false);
+    } else if (vx !== 0) {
+      const dec = DECEL * airFactor * dt;
+      vx = Math.abs(vx) <= dec ? 0 : vx - Math.sign(vx) * dec;
+    }
+    this.girl.setVelocityX(vx);
+
+    // --- Coyote time и буфер прыжка ---
+    if (onGround) this._coyote = 110; else this._coyote -= delta;
+    if (Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
+        Phaser.Input.Keyboard.JustDown(this.cursors.space)) {
+      this._jumpBuf = 130;
     } else {
-      this.girl.setVelocityX(0);
+      this._jumpBuf -= delta;
     }
 
-    if ((this.cursors.up.isDown || this.cursors.space.isDown) && onGround) {
+    if (this._jumpBuf > 0 && this._coyote > 0) {
+      this._jumpBuf = 0;
+      this._coyote = 0;
       this.girl.setVelocityY(-520);
       SoundFX.jump();
+      this._squashTween('jump');
+      this._dustEmitter.explode(5, this.girl.x, this.girl.body.bottom);
+    }
+
+    // --- Переменная высота прыжка: отпустил кнопку — взлёт гасится ---
+    const jumpHeld = this.cursors.up.isDown || this.cursors.space.isDown;
+    let vy = this.girl.body.velocity.y;
+    if (!jumpHeld && vy < -160) {
+      this.girl.setVelocityY(vy + 1400 * dt);
+    }
+    // --- Падение быстрее взлёта (snappy jump) ---
+    if (!onGround && vy > 0) {
+      this.girl.setVelocityY(Math.min(vy + 500 * dt, 800));
+    }
+
+    // --- Приземление: squash + пыль ---
+    if (onGround && !this._wasOnGround && this._prevVy > 250) {
+      this._squashTween('land');
+      this._dustEmitter.explode(Math.min(10, Math.round(this._prevVy / 90)),
+        this.girl.x, this.girl.body.bottom);
+    }
+    this._wasOnGround = onGround;
+    this._prevVy = vy;
+
+    // --- Пыль из-под ног при беге ---
+    this._runDustTimer -= delta;
+    if (onGround && Math.abs(vx) > 120 && this._runDustTimer <= 0) {
+      this._runDustTimer = 160;
+      this._dustEmitter.explode(1, this.girl.x - Math.sign(vx) * 10, this.girl.body.bottom);
     }
 
     if (Phaser.Input.Keyboard.JustDown(this.throwKey)) {
@@ -1707,7 +1788,7 @@ class GameScene extends Phaser.Scene {
     }
 
     const sz = this.girlSize === 'small' ? 0.6 : 1.0;
-    this.girl.setScale(sz, sz);
+    this.girl.setScale(sz * this._squash.x, sz * this._squash.y);
 
     // Движущаяся платформа — двигаем вручную, при смене направления меняет высоту
     const mp = this.movingPlatform;
@@ -2885,6 +2966,25 @@ function drawVietnameseBoat(scene) {
   g.fillTriangle(20, 7, 14, 11, 26, 11);
 
   g.generateTexture('viet_boat', 90, 32);
+  g.destroy();
+}
+
+// Текстуры частиц: пылинка и искра
+function drawParticles(scene) {
+  // Пылинка — мягкий песочный кружок
+  let g = scene.make.graphics({ x: 0, y: 0, add: false });
+  g.fillStyle(0xD8C9A8); g.fillCircle(4, 4, 4);
+  g.fillStyle(0xEFE4C8); g.fillCircle(4, 4, 2.5);
+  g.generateTexture('p_dust', 8, 8);
+  g.destroy();
+
+  // Искра — жёлтый ромбик с белой серединой
+  g = scene.make.graphics({ x: 0, y: 0, add: false });
+  g.fillStyle(0xFFDD33);
+  g.fillTriangle(5, 0, 10, 5, 5, 10);
+  g.fillTriangle(5, 0, 0, 5, 5, 10);
+  g.fillStyle(0xFFFFFF); g.fillCircle(5, 5, 1.8);
+  g.generateTexture('p_spark', 10, 10);
   g.destroy();
 }
 
