@@ -4,7 +4,7 @@
 
 const GAME_W = 960;
 const GAME_H = 560;
-const MAX_LEVEL = 2;
+const MAX_LEVEL = 3;
 const SPRITES = 'assets/sprites/cutout/resized/';
 const LB_KEY = 'puteshestvie_scores';
 
@@ -57,6 +57,13 @@ class BootScene extends Phaser.Scene {
     drawCrab(this);
     drawCrabB(this);
     drawOctopus(this);
+    drawUnderwaterBackground(this);
+    drawUwGround(this);
+    drawUwPlatform(this);
+    drawJellyfish(this);
+    drawPuffer(this);
+    drawPearl(this);
+    drawSeaweed(this);
     drawNonLa(this);
     drawVietnameseLantern(this);
     drawVietnameseBoat(this);
@@ -194,17 +201,18 @@ class LevelSelectScene extends Phaser.Scene {
       fontSize: '42px', fill: '#FFD700', stroke: '#000', strokeThickness: 6, fontStyle: 'bold'
     }).setOrigin(0.5);
 
-    // Два уровня
+    // Три уровня
     const levels = [
-      { num: 1, emoji: '🌲', name: 'Лес',    sub: 'Черепашки и ёжики',  color: 0x2d6e1a },
-      { num: 2, emoji: '🏖', name: 'Пляж',   sub: 'Крабики и морские звёзды', color: 0x1a6e8c },
+      { num: 1, emoji: '🌲', name: 'Лес',   sub: 'Черепашки и ёжики',        color: 0x2d6e1a },
+      { num: 2, emoji: '🏖', name: 'Пляж',  sub: 'Крабики и морские звёзды', color: 0x1a6e8c },
+      { num: 3, emoji: '🌊', name: 'Океан', sub: 'Медузы и жемчужины',       color: 0x1a3a8c },
     ];
 
     this._sel = 0;
     this._cards = [];
 
     levels.forEach((lvl, i) => {
-      const cx = GAME_W / 2 - 190 + i * 380;
+      const cx = GAME_W / 2 + (i - 1) * 310;
       const cy = GAME_H / 2 + 10;
 
       // Рамка карточки
@@ -228,7 +236,7 @@ class LevelSelectScene extends Phaser.Scene {
       }).setOrigin(0.5);
 
       // Кликабельность
-      const hitZone = this.add.zone(cx, cy, 320, 260).setInteractive({ useHandCursor: true });
+      const hitZone = this.add.zone(cx, cy, 290, 260).setInteractive({ useHandCursor: true });
       hitZone.on('pointerdown', () => { this._sel = i; this._startSelected(); });
       hitZone.on('pointerover', () => { this._sel = i; this._drawCards(); });
     });
@@ -242,8 +250,8 @@ class LevelSelectScene extends Phaser.Scene {
     this.tweens.add({ targets: hint, alpha: 0.5, duration: 900, yoyo: true, repeat: -1 });
 
     this.input.keyboard.on('keydown', e => {
-      if (e.key === 'ArrowLeft')  { this._sel = 0; this._drawCards(); }
-      if (e.key === 'ArrowRight') { this._sel = 1; this._drawCards(); }
+      if (e.key === 'ArrowLeft')  { this._sel = Math.max(0, this._sel - 1); this._drawCards(); }
+      if (e.key === 'ArrowRight') { this._sel = Math.min(this._cards.length - 1, this._sel + 1); this._drawCards(); }
       if (e.key === 'Enter' || e.key === ' ') this._startSelected();
       if (e.key === 'Escape') this.scene.start('Menu');
     });
@@ -254,9 +262,9 @@ class LevelSelectScene extends Phaser.Scene {
       card.clear();
       const selected = i === this._sel;
       card.fillStyle(selected ? lvl.color : 0x111133, selected ? 0.85 : 0.6);
-      card.fillRoundedRect(cx - 158, cy - 130, 316, 260, 18);
+      card.fillRoundedRect(cx - 145, cy - 130, 290, 260, 18);
       card.lineStyle(selected ? 5 : 2, selected ? 0xFFD700 : 0x555588, 1);
-      card.strokeRoundedRect(cx - 158, cy - 130, 316, 260, 18);
+      card.strokeRoundedRect(cx - 145, cy - 130, 290, 260, 18);
     });
   }
 
@@ -381,8 +389,7 @@ class LevelCompleteScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     // Жизни
-    const hearts = ['', '❤️', '❤️❤️', '❤️❤️❤️'];
-    this.add.text(GAME_W / 2, GAME_H / 2 - 15, `Жизни: ${hearts[Math.max(0, this.lives)]}`, {
+    this.add.text(GAME_W / 2, GAME_H / 2 - 15, `Жизни: ${'❤️'.repeat(Math.max(0, this.lives))}`, {
       fontSize: '24px', fill: '#ff88aa'
     }).setOrigin(0.5);
 
@@ -657,7 +664,9 @@ class GameScene extends Phaser.Scene {
     this.girlSize = 'big';
     this.isInvincible = false;
     this.levelOver = false;
-    this.theme = this.currentLevel === 2 ? 'beach' : 'forest';
+    this.theme = this.currentLevel === 2 ? 'beach'
+               : this.currentLevel === 3 ? 'underwater'
+               : 'forest';
     // Следующий порог для получения жизни
     const prevMilestone = Math.floor(this.score / 50) * 50;
     this.nextLifeMilestone = prevMilestone + 50;
@@ -667,9 +676,10 @@ class GameScene extends Phaser.Scene {
     const levelData = generateLevelData(this.currentLevel);
 
     const isBeach = this.theme === 'beach';
-    const bgKey   = isBeach ? 'beach_bg'       : 'background';
-    const gndKey  = isBeach ? 'beach_ground'   : 'ground';
-    const platKey = isBeach ? 'beach_platform' : 'platform';
+    const isWater = this.theme === 'underwater';
+    const bgKey   = isWater ? 'uw_bg'       : (isBeach ? 'beach_bg'       : 'background');
+    const gndKey  = isWater ? 'uw_ground'   : (isBeach ? 'beach_ground'   : 'ground');
+    const platKey = isWater ? 'uw_platform' : (isBeach ? 'beach_platform' : 'platform');
 
     // Анимация ходьбы краба (два кадра)
     if (isBeach && !this.anims.exists('crab_walk')) {
@@ -686,9 +696,10 @@ class GameScene extends Phaser.Scene {
 
     // === Ночная тема / закат (активируется в середине уровня) ===
     // Пляж: оверлей за игровыми объектами (depth -1), тёплый закат
+    // Океан: оверлей фона (depth -1), тёмная глубина
     // Лес:  оверлей поверх всего (depth 5), полная тьма
-    const overlayDepth = isBeach ? -1 : 5;
-    const overlayColor = isBeach ? 0xCC4400 : 0x05021a;
+    const overlayDepth = (isBeach || isWater) ? -1 : 5;
+    const overlayColor = isBeach ? 0xCC4400 : (isWater ? 0x001844 : 0x05021a);
     this.nightOverlay = this.add.graphics().setScrollFactor(0).setDepth(overlayDepth).setAlpha(0);
     this.nightOverlay.fillStyle(overlayColor, 1);
     this.nightOverlay.fillRect(0, 0, GAME_W, GAME_H);
@@ -776,11 +787,29 @@ class GameScene extends Phaser.Scene {
       lifespan: 550, gravityY: 350, rotate: { min: 0, max: 360 }, emitting: false
     }).setDepth(6);
 
+    // === Подводный мир: плавучесть и пузырьки ===
+    if (isWater) {
+      this.girl.body.setGravityY(-440); // эффективная гравитация 160 — медленное погружение
+      // Пузырьки от гребка
+      this._bubbleBurst = this.add.particles(0, 0, 'p_bubble', {
+        speed: { min: 30, max: 90 }, angle: { min: 250, max: 290 },
+        scale: { start: 0.7, end: 0.2 }, alpha: { start: 0.9, end: 0 },
+        lifespan: 700, emitting: false
+      }).setDepth(2);
+      // Фоновые пузырьки, поднимающиеся со дна
+      this._bubbleAmbient = this.add.particles(0, 0, 'p_bubble', {
+        x: { min: 20, max: GAME_W - 20 }, y: GAME_H - 40,
+        speedY: { min: -65, max: -25 }, speedX: { min: -10, max: 10 },
+        scale: { start: 0.35, end: 0.9 }, alpha: { start: 0.65, end: 0 },
+        lifespan: 7000, frequency: 420, quantity: 1
+      }).setDepth(-1);
+    }
+
     this.turtleSpeed   = levelData.turtleSpeed;
     this.hedgehogSpeed = levelData.hedgehogSpeed;
 
-    // На пляже — крабики; в лесу — черепашки и ёжики
-    const enemyTex = isBeach ? 'crab' : 'turtle';
+    // На пляже — крабики; в океане — медузы; в лесу — черепашки и ёжики
+    const enemyTex = isWater ? 'jellyfish' : (isBeach ? 'crab' : 'turtle');
 
     this.turtles = this.physics.add.group();
     levelData.turtles.forEach(pos => {
@@ -789,11 +818,16 @@ class GameScene extends Phaser.Scene {
       t.setBounceX(1);
       t.setCollideWorldBounds(true);
       if (isBeach) t.play('crab_walk');
+      if (isWater) {
+        t.body.setAllowGravity(false);
+        t.setBounce(1, 1);
+        t._phase = Math.random() * Math.PI * 2;
+      }
     });
 
     // Ёжики — только в лесу
     this.hedgehogs = this.physics.add.group();
-    if (!isBeach) {
+    if (!isBeach && !isWater) {
       (levelData.hedgehogs || []).forEach(pos => {
         const h = this.hedgehogs.create(pos.x, pos.y, 'hedgehog');
         h.setVelocityX(Phaser.Math.RND.pick([-this.hedgehogSpeed, this.hedgehogSpeed]));
@@ -864,10 +898,12 @@ class GameScene extends Phaser.Scene {
       this.killEnemy(hedgehog, 'hedgehog');
     });
 
-    // Девочка → черепашка
+    // Девочка → черепашка/краб/медуза
+    // Медуз и рыб-ежей топтать нельзя (жалят) — только яблоком
     this.physics.add.overlap(this.girl, this.turtles, (girl, turtle) => {
-      if (this.levelOver || this.isInvincible) return;
-      if (girl.body.velocity.y > 0 && girl.y < turtle.y - 10) {
+      if (this.levelOver || this.isInvincible || !turtle.active) return;
+      const canStomp = this.theme !== 'underwater';
+      if (canStomp && girl.body.velocity.y > 0 && girl.y < turtle.y - 10) {
         // Прыжок на черепашку
         this.killEnemy(turtle, 'turtle');
         girl.setVelocityY(-350);
@@ -969,7 +1005,7 @@ class GameScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.girl, true, 0.1, 0.1);
 
     this.throwCooldown = 0;
-    this.cloudList = spawnClouds(this);
+    this.cloudList = isWater ? [] : spawnClouds(this);
     if (isBeach) {
       this.decorList = spawnBeachDecor(this);
       this.startWaves();
@@ -990,15 +1026,20 @@ class GameScene extends Phaser.Scene {
       }});
       // Таймер бросков — каждые 3 секунды
       this.time.addEvent({ delay: 3000, loop: true, callback: this.octopusThrowUpdate, callbackScope: this });
+    } else if (isWater) {
+      this.decorList = spawnUnderwaterDecor(this);
+      SoundFX.startBeachAmbient();      // шум воды
+      SoundFX.startUnderwaterMusic();
     } else {
       this.decorList = spawnGroundDecor(this);
     }
     this._windTime = 0;
 
-    // Самолёт — ~3 раза за уровень
-    this.spawnPlaneFlights();
-    // Воздушный шар — каждые 2 минуты
-    this.time.delayedCall(Phaser.Math.Between(15000, 30000), () => this.scheduleBalloon());
+    // Самолёт и воздушный шар — не под водой
+    if (!isWater) {
+      this.spawnPlaneFlights();
+      this.time.delayedCall(Phaser.Math.Between(15000, 30000), () => this.scheduleBalloon());
+    }
 
     // Первая капибара / морская звезда через 5 сек, потом каждые 8-14 сек
     this.scheduleCapybara(5000);
@@ -1065,7 +1106,8 @@ class GameScene extends Phaser.Scene {
 
   startNight() {
     // Надпись
-    const nightLabel = this.theme === 'beach' ? '🌅 Закат на пляже...' : '🌙 Наступает ночь...';
+    const nightLabel = this.theme === 'underwater' ? '🌊 Заплываем глубже...'
+                     : this.theme === 'beach' ? '🌅 Закат на пляже...' : '🌙 Наступает ночь...';
     const msg = this.add.text(GAME_W / 2, GAME_H / 2 - 70, nightLabel, {
       fontSize: '36px', fill: '#c8c8ff',
       stroke: '#00001a', strokeThickness: 6, fontStyle: 'bold'
@@ -1076,9 +1118,9 @@ class GameScene extends Phaser.Scene {
       onComplete: () => msg.destroy()
     });
 
-    // Пляж: лёгкое потепление только фона; лес: полная тьма поверх всего
-    const overlayTargetAlpha = this.theme === 'beach' ? 0.30 : 0.58;
-    const starsTargetAlpha   = this.theme === 'beach' ? 0.45 : 1.0;
+    // Пляж: лёгкое потепление фона; океан: тёмная глубина; лес: полная тьма поверх всего
+    const overlayTargetAlpha = this.theme === 'beach' ? 0.30 : this.theme === 'underwater' ? 0.40 : 0.58;
+    const starsTargetAlpha   = this.theme === 'beach' ? 0.45 : this.theme === 'underwater' ? 0 : 1.0;
     this.tweens.add({
       targets: this.nightOverlay,
       alpha: overlayTargetAlpha,
@@ -1354,6 +1396,21 @@ class GameScene extends Phaser.Scene {
     const total = this.turtles.countActive() + this.hedgehogs.countActive();
     if (total >= 8) return;
 
+    // В океане — медузы и рыбы-ежи, заплывают сбоку
+    if (this.theme === 'underwater') {
+      const tex = Phaser.Math.RND.frac() < 0.6 ? 'jellyfish' : 'puffer';
+      const fromLeft = Phaser.Math.RND.frac() > 0.5;
+      const t = this.turtles.create(
+        fromLeft ? 40 : GAME_W - 40,
+        Phaser.Math.Between(80, GAME_H - 120), tex);
+      t.body.setAllowGravity(false);
+      t.setBounce(1, 1);
+      t.setCollideWorldBounds(true);
+      t.setVelocityX((fromLeft ? 1 : -1) * this.turtleSpeed);
+      t._phase = Math.random() * Math.PI * 2;
+      return;
+    }
+
     // На пляже только крабики (в группе черепах, можно запрыгнуть); ёжики только в лесу
     const kind = this.theme === 'beach' ? 'crab' :
       (type || (Phaser.Math.RND.frac() < 0.55 ? 'turtle' : 'hedgehog'));
@@ -1386,11 +1443,13 @@ class GameScene extends Phaser.Scene {
   spawnCapybara() {
     if (this.levelOver) return;
     const x = Phaser.Math.Between(60, GAME_W - 60);
-    const bonusTex = this.theme === 'beach' ? 'starfish_bonus' : 'capybara';
+    const bonusTex = this.theme === 'underwater' ? 'pearl'
+                   : this.theme === 'beach' ? 'starfish_bonus' : 'capybara';
     const capy = this.capybaras.create(x, -20, bonusTex);
     capy.setCollideWorldBounds(true);
     capy.setBounceX(1);
     capy.setVelocityY(120);
+    if (this.theme === 'underwater') capy.body.setGravityY(-520); // жемчужина тонет медленно
     const spd = Phaser.Math.Between(40, 75);
     capy.setVelocityX(Phaser.Math.RND.pick([-spd, spd]));
     capy._walkSpeed = spd;
@@ -1461,7 +1520,8 @@ class GameScene extends Phaser.Scene {
     this.score += 20;
     this.scoreText.setText('Очки: ' + this.score);
 
-    const bonusEmoji = this.theme === 'beach' ? '⭐ +20' : '🦫 +20';
+    const bonusEmoji = this.theme === 'underwater' ? '🦪 +20'
+                     : this.theme === 'beach' ? '⭐ +20' : '🦫 +20';
     const pop = this.add.text(capy.x, capy.y - 20, bonusEmoji, {
       fontSize: '22px', fill: '#ffdd00', stroke: '#000', strokeThickness: 3
     }).setOrigin(0.5);
@@ -1708,9 +1768,11 @@ class GameScene extends Phaser.Scene {
     }
 
     const onGround = this.girl.body.blocked.down;
+    const isWater = this.theme === 'underwater';
 
     // --- Плавный разгон/торможение (в воздухе управление слабее) ---
-    const MAX_RUN = 180, ACCEL = 1500, DECEL = 2200;
+    const MAX_RUN = isWater ? 150 : 180;
+    const ACCEL = 1500, DECEL = 2200;
     const airFactor = onGround ? 1 : 0.7;
     let vx = this.girl.body.velocity.x;
     if (this.cursors.left.isDown) {
@@ -1725,43 +1787,57 @@ class GameScene extends Phaser.Scene {
     }
     this.girl.setVelocityX(vx);
 
-    // --- Coyote time и буфер прыжка ---
-    if (onGround) this._coyote = 110; else this._coyote -= delta;
-    if (Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
-        Phaser.Input.Keyboard.JustDown(this.cursors.space)) {
-      this._jumpBuf = 130;
+    if (isWater) {
+      // === ПЛАВАНИЕ: гребок вверх в любой момент, вода тормозит падение ===
+      if (Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
+          Phaser.Input.Keyboard.JustDown(this.cursors.space)) {
+        this.girl.setVelocityY(-270);
+        SoundFX.swim();
+        this._squashTween('jump');
+        this._bubbleBurst.explode(4, this.girl.x, this.girl.y - 20);
+      }
+      if (this.girl.body.velocity.y > 150) this.girl.setVelocityY(150);
+      this._wasOnGround = onGround;
+      this._prevVy = this.girl.body.velocity.y;
     } else {
-      this._jumpBuf -= delta;
-    }
+      // --- Coyote time и буфер прыжка ---
+      if (onGround) this._coyote = 110; else this._coyote -= delta;
+      if (Phaser.Input.Keyboard.JustDown(this.cursors.up) ||
+          Phaser.Input.Keyboard.JustDown(this.cursors.space)) {
+        this._jumpBuf = 130;
+      } else {
+        this._jumpBuf -= delta;
+      }
 
-    if (this._jumpBuf > 0 && this._coyote > 0) {
-      this._jumpBuf = 0;
-      this._coyote = 0;
-      this.girl.setVelocityY(-520);
-      SoundFX.jump();
-      this._squashTween('jump');
-      this._dustEmitter.explode(5, this.girl.x, this.girl.body.bottom);
-    }
+      if (this._jumpBuf > 0 && this._coyote > 0) {
+        this._jumpBuf = 0;
+        this._coyote = 0;
+        this.girl.setVelocityY(-520);
+        SoundFX.jump();
+        this._squashTween('jump');
+        this._dustEmitter.explode(5, this.girl.x, this.girl.body.bottom);
+      }
 
-    // --- Переменная высота прыжка: отпустил кнопку — взлёт гасится ---
-    const jumpHeld = this.cursors.up.isDown || this.cursors.space.isDown;
-    let vy = this.girl.body.velocity.y;
-    if (!jumpHeld && vy < -160) {
-      this.girl.setVelocityY(vy + 1400 * dt);
-    }
-    // --- Падение быстрее взлёта (snappy jump) ---
-    if (!onGround && vy > 0) {
-      this.girl.setVelocityY(Math.min(vy + 500 * dt, 800));
-    }
+      // --- Переменная высота прыжка: отпустил кнопку — взлёт гасится ---
+      const jumpHeld = this.cursors.up.isDown || this.cursors.space.isDown;
+      let vy = this.girl.body.velocity.y;
+      if (!jumpHeld && vy < -160) {
+        this.girl.setVelocityY(vy + 1400 * dt);
+      }
+      // --- Падение быстрее взлёта (snappy jump) ---
+      if (!onGround && vy > 0) {
+        this.girl.setVelocityY(Math.min(vy + 500 * dt, 800));
+      }
 
-    // --- Приземление: squash + пыль ---
-    if (onGround && !this._wasOnGround && this._prevVy > 250) {
-      this._squashTween('land');
-      this._dustEmitter.explode(Math.min(10, Math.round(this._prevVy / 90)),
-        this.girl.x, this.girl.body.bottom);
+      // --- Приземление: squash + пыль ---
+      if (onGround && !this._wasOnGround && this._prevVy > 250) {
+        this._squashTween('land');
+        this._dustEmitter.explode(Math.min(10, Math.round(this._prevVy / 90)),
+          this.girl.x, this.girl.body.bottom);
+      }
+      this._wasOnGround = onGround;
+      this._prevVy = vy;
     }
-    this._wasOnGround = onGround;
-    this._prevVy = vy;
 
     // --- Пыль из-под ног при беге ---
     this._runDustTimer -= delta;
@@ -1831,9 +1907,14 @@ class GameScene extends Phaser.Scene {
     }
 
     this.turtles.children.iterate(t => {
-      if (!t) return;
+      if (!t || !t.active) return;
       if (t.x <= 32) t.setVelocityX(Math.abs(t.body.velocity.x));
       if (t.x >= GAME_W - 32) t.setVelocityX(-Math.abs(t.body.velocity.x));
+      if (isWater) {
+        // Медузы и рыбы плавно покачиваются вверх-вниз
+        t.body.velocity.y = Math.sin(time * 0.002 + t._phase) * 38;
+        if (t.body.velocity.x !== 0) t.setFlipX(t.body.velocity.x > 0);
+      }
     });
     this.hedgehogs.children.iterate(h => {
       if (!h) return;
@@ -2986,6 +3067,14 @@ function drawParticles(scene) {
   g.fillStyle(0xFFFFFF); g.fillCircle(5, 5, 1.8);
   g.generateTexture('p_spark', 10, 10);
   g.destroy();
+
+  // Пузырёк воздуха
+  g = scene.make.graphics({ x: 0, y: 0, add: false });
+  g.fillStyle(0x9FD8F0); g.fillCircle(5, 5, 5);
+  g.fillStyle(0x5FA8D0); g.fillCircle(5, 5, 3.4);
+  g.fillStyle(0xD7F0FA); g.fillCircle(3.4, 3.2, 1.6);
+  g.generateTexture('p_bubble', 10, 10);
+  g.destroy();
 }
 
 function drawStarfishBonus(scene) {
@@ -3142,6 +3231,246 @@ function spawnBeachDecor(scene) {
 }
 
 // ============================
+//  Подводный мир (уровень 3)
+// ============================
+
+function drawUnderwaterBackground(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+
+  // Толща воды — светлее у поверхности, темнее на глубине (сплошные полосы)
+  const bands = [
+    [0,   80, 0x2E7DB0], [80, 80, 0x2A70A4], [160, 80, 0x256298],
+    [240, 80, 0x20558B], [320, 80, 0x1B487E], [400, 80, 0x163B71],
+    [480, 80, 0x123264],
+  ];
+  bands.forEach(([y, h, c]) => { g.fillStyle(c); g.fillRect(0, y, GAME_W, h); });
+
+  // Лучи света сверху (светлее воды)
+  g.fillStyle(0x4090C0);
+  g.fillTriangle(140, 0, 220, 0, 330, 520);
+  g.fillTriangle(420, 0, 470, 0, 560, 480);
+  g.fillTriangle(680, 0, 770, 0, 850, 500);
+
+  // Песчаное дно
+  g.fillStyle(0xC9B280); g.fillRect(0, 520, GAME_W, 40);
+  g.fillStyle(0xD8C394); g.fillRect(0, 520, GAME_W, 6);
+
+  // Камни на дне
+  g.fillStyle(0x6A7B8A);
+  g.fillEllipse(120, 522, 60, 28); g.fillEllipse(550, 524, 44, 22);
+  g.fillStyle(0x596A78);
+  g.fillEllipse(150, 524, 36, 18); g.fillEllipse(820, 522, 50, 24);
+
+  // Затонувший корабль (справа, лежит на дне с креном)
+  g.fillStyle(0x4A3520);
+  g.fillPoints([
+    {x:640,y:520}, {x:660,y:455}, {x:690,y:430},
+    {x:830,y:430}, {x:870,y:470}, {x:880,y:520}
+  ], true);
+  // Борт
+  g.fillStyle(0x5C4428);
+  g.fillPoints([{x:665,y:455},{x:692,y:438},{x:826,y:438},{x:858,y:468},{x:864,y:510},{x:668,y:510}], true);
+  // Иллюминаторы
+  g.fillStyle(0x2A4A60);
+  [710, 750, 790, 824].forEach(x => g.fillCircle(x, 472, 7));
+  g.fillStyle(0x1A3346);
+  [710, 750, 790, 824].forEach(x => g.fillCircle(x, 472, 4.5));
+  // Сломанная мачта
+  g.fillStyle(0x3D2C18);
+  g.fillPoints([{x:748,y:432},{x:756,y:432},{x:778,y:350},{x:771,y:348}], true);
+  // Обрывок паруса
+  g.fillStyle(0x8A9AA5);
+  g.fillTriangle(774, 352, 776, 395, 740, 390);
+
+  // Дальние водоросли (силуэты)
+  g.fillStyle(0x14524A);
+  [60, 300, 480, 920].forEach(x => {
+    g.fillEllipse(x, 500, 14, 70);
+    g.fillEllipse(x + 12, 508, 10, 52);
+  });
+
+  g.generateTexture('uw_bg', GAME_W, GAME_H);
+  g.destroy();
+}
+
+function drawUwGround(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  // Песок морского дна
+  g.fillStyle(0xC9B280); g.fillRect(0, 0, 64, 32);
+  g.fillStyle(0xD8C394); g.fillRect(0, 0, 64, 5);
+  // Камешки и ракушечная крошка
+  g.fillStyle(0xB09A68);
+  g.fillCircle(12, 14, 3); g.fillCircle(40, 22, 2.5); g.fillCircle(55, 10, 2);
+  g.fillStyle(0xE5D5AC);
+  g.fillCircle(25, 18, 2); g.fillCircle(48, 15, 1.5); g.fillCircle(6, 25, 2);
+  g.generateTexture('uw_ground', 64, 32);
+  g.destroy();
+}
+
+function drawUwPlatform(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  // Коралловый риф-платформа
+  g.fillStyle(0x8A6A8E); g.fillRoundedRect(0, 6, 64, 22, 6);
+  g.fillStyle(0xA080A4); g.fillRect(0, 6, 64, 5);
+  // Кораллы сверху
+  g.fillStyle(0xE86A8A);
+  g.fillCircle(10, 7, 5); g.fillCircle(30, 5, 6); g.fillCircle(52, 7, 4);
+  g.fillStyle(0xF08AA5);
+  g.fillCircle(10, 5, 3); g.fillCircle(30, 3, 3.5); g.fillCircle(52, 5, 2.5);
+  g.fillStyle(0xF0B040);
+  g.fillCircle(20, 6, 3); g.fillCircle(42, 6, 3.5);
+  g.generateTexture('uw_platform', 64, 28);
+  g.destroy();
+}
+
+// Милая медуза
+function drawJellyfish(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+
+  // Щупальца — волнистые ленточки
+  g.fillStyle(0xBB77DD);
+  [8, 15, 22, 29].forEach((x, i) => {
+    const sway = (i % 2 === 0) ? 2 : -2;
+    g.fillEllipse(x, 32, 4, 16);
+    g.fillEllipse(x + sway, 42, 3, 10);
+  });
+
+  // Купол
+  g.fillStyle(0xCC88EE);
+  g.fillEllipse(19, 17, 34, 26);
+  g.fillStyle(0xDDA5F5);
+  g.fillEllipse(19, 14, 28, 18);
+  // Блик
+  g.fillStyle(0xF0CCFF);
+  g.fillEllipse(13, 10, 12, 8);
+  // Кромка купола
+  g.fillStyle(0xAA66CC);
+  g.fillEllipse(19, 26, 32, 7);
+
+  // Глазки
+  g.fillStyle(0xFFFFFF); g.fillCircle(13, 19, 4.5); g.fillCircle(25, 19, 4.5);
+  g.fillStyle(0x222244); g.fillCircle(14, 20, 2.5); g.fillCircle(26, 20, 2.5);
+  g.fillStyle(0xFFFFFF); g.fillCircle(15, 19, 1);   g.fillCircle(27, 19, 1);
+
+  // Улыбка
+  g.fillStyle(0x884499); g.fillEllipse(19, 25, 8, 3);
+
+  g.generateTexture('jellyfish', 38, 48);
+  g.destroy();
+}
+
+// Рыба-ёж (надутая, с колючками)
+function drawPuffer(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  const cx = 21, cy = 20, R = 13;
+
+  // Колючки по кругу
+  g.fillStyle(0xD08020);
+  for (let i = 0; i < 12; i++) {
+    const a = (i / 12) * Math.PI * 2;
+    const x1 = cx + Math.cos(a) * R, y1 = cy + Math.sin(a) * R;
+    const x2 = cx + Math.cos(a) * (R + 7), y2 = cy + Math.sin(a) * (R + 7);
+    const px = Math.cos(a + Math.PI / 2) * 2.5, py = Math.sin(a + Math.PI / 2) * 2.5;
+    g.fillTriangle(x1 - px, y1 - py, x1 + px, y1 + py, x2, y2);
+  }
+
+  // Тело — шар
+  g.fillStyle(0xF0B040); g.fillCircle(cx, cy, R);
+  g.fillStyle(0xF8CC70); g.fillCircle(cx - 3, cy - 4, R * 0.55);
+  // Брюшко
+  g.fillStyle(0xFCE8B8); g.fillEllipse(cx, cy + 6, 16, 9);
+
+  // Хвостик
+  g.fillStyle(0xE89830);
+  g.fillTriangle(cx + R, cy, cx + R + 8, cy - 6, cx + R + 8, cy + 6);
+
+  // Глаза (большие, смотрят вперёд-влево)
+  g.fillStyle(0xFFFFFF); g.fillCircle(cx - 6, cy - 3, 5);
+  g.fillStyle(0x222244); g.fillCircle(cx - 7, cy - 3, 3);
+  g.fillStyle(0xFFFFFF); g.fillCircle(cx - 8, cy - 4, 1.2);
+
+  // Ротик-бантик
+  g.fillStyle(0xC06818); g.fillEllipse(cx - 9, cy + 5, 5, 3);
+
+  g.generateTexture('puffer', 44, 40);
+  g.destroy();
+}
+
+// Жемчужина в раковине
+function drawPearl(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  // Нижняя створка раковины
+  g.fillStyle(0xE08898);
+  g.fillEllipse(15, 23, 28, 12);
+  g.fillStyle(0xF0A8B8);
+  g.fillEllipse(15, 22, 22, 8);
+  // Жемчужина
+  g.fillStyle(0xF6F3EE); g.fillCircle(15, 14, 8);
+  g.fillStyle(0xFFFFFF); g.fillCircle(12, 11, 3);
+  g.fillStyle(0xD8E8F0); g.fillEllipse(15, 18, 11, 4);
+  g.generateTexture('pearl', 30, 30);
+  g.destroy();
+}
+
+// Водоросль (качается как трава в лесу)
+function drawSeaweed(scene) {
+  const g = scene.make.graphics({ x: 0, y: 0, add: false });
+  g.fillStyle(0x2E8B57);
+  g.fillEllipse(12, 70, 10, 40);
+  g.fillEllipse(6,  78, 8, 28);
+  g.fillEllipse(18, 76, 8, 32);
+  g.fillStyle(0x3CA86B);
+  g.fillEllipse(12, 62, 6, 26);
+  g.fillEllipse(7,  72, 4, 18);
+  g.generateTexture('seaweed', 24, 92);
+  g.destroy();
+}
+
+function spawnUnderwaterDecor(scene) {
+  const groundY = GAME_H - 32;
+  const decorItems = [];
+
+  // Водоросли — качаются течением (механизм ветра из леса)
+  [50, 180, 330, 500, 640, 880].forEach(x => {
+    const sc = Phaser.Math.FloatBetween(0.7, 1.3);
+    const img = scene.add.image(x + Phaser.Math.Between(-15, 15), groundY + 2, 'seaweed')
+      .setOrigin(0.5, 1).setScale(sc).setDepth(-1);
+    decorItems.push({ img, speed: Phaser.Math.FloatBetween(0.8, 1.6), phase: Math.random() * Math.PI * 2 });
+  });
+
+  // Жемчужины-декорации и кораллы на дне
+  for (let x = 80; x < GAME_W - 60; x += Phaser.Math.Between(140, 240)) {
+    scene.add.image(x, groundY - 2, 'pearl')
+      .setOrigin(0.5, 1).setDepth(-2).setScale(0.55).setAlpha(0.85);
+  }
+
+  // Стайки декоративных рыбок плавают туда-сюда
+  for (let i = 0; i < 3; i++) {
+    const y = Phaser.Math.Between(90, 320);
+    const fromLeft = i % 2 === 0;
+    const school = [];
+    for (let k = 0; k < 3; k++) {
+      const f = scene.add.image(
+        (fromLeft ? -40 : GAME_W + 40) - k * 26 * (fromLeft ? 1 : -1),
+        y + (k % 2) * 14, 'jumping_fish')
+        .setDepth(-1).setScale(0.8).setFlipX(fromLeft)
+        .setTint([0xFFD060, 0x60D0FF, 0xFF9090][i]);
+      school.push(f);
+    }
+    const dur = Phaser.Math.Between(20000, 32000);
+    school.forEach(f => {
+      scene.tweens.add({
+        targets: f, x: fromLeft ? GAME_W + 60 : -60,
+        duration: dur, repeat: -1, delay: i * 4000,
+        onRepeat: () => { f.y = Phaser.Math.Between(90, 340); }
+      });
+    });
+  }
+
+  return decorItems;
+}
+
+// ============================
 //  ЗВУКОВЫЕ ЭФФЕКТЫ (Web Audio API)
 // ============================
 const SoundFX = (() => {
@@ -3201,6 +3530,12 @@ const SoundFX = (() => {
       tone(659,  'sine', 0.28, 0.26, 0.09);
       tone(784,  'sine', 0.32, 0.28, 0.18);
       tone(1047, 'sine', 0.28, 0.16, 0.29);
+    },
+
+    // --- Гребок под водой ---
+    swim() {
+      tone(220, 'sine', 0.18, 0.16, 0, 95);
+      noise(0.10, 900, 2, 0.10, 0.02);
     },
 
     // --- Бросок яблока ---
@@ -3308,6 +3643,32 @@ const SoundFX = (() => {
 
     stopBeachMusic() {
       if (_musicId !== null) { clearInterval(_musicId); _musicId = null; }
+    },
+
+    // --- Подводная музыка: спокойная, мечтательная ---
+    startUnderwaterMusic() {
+      if (_musicId !== null) return;
+      // Минорная пентатоника A: A3 C4 D4 E4 G4 A4 C5 D5
+      const N = [220, 262, 294, 330, 392, 440, 523, 587];
+      const P = [0,2,4,5, 4,2,1,2, 0,3,5,6, 5,3,2,1,
+                 0,2,4,6, 7,6,4,2, 1,3,4,5, 3,2,1,0];
+      let step = 0;
+      const MS = 340; // ~88 BPM — медленно, как течение
+
+      const tick = () => {
+        const f = N[P[step % P.length]];
+        // Мягкий колокольчик-арпеджио
+        tone(f, 'triangle', 0.55, 0.07);
+        // Глубокий бас-слой
+        tone(f * 0.5, 'sine', 0.8, 0.045);
+        // Верхний отзвук на сильную долю
+        if (step % 4 === 0) tone(f * 2, 'sine', 0.5, 0.025);
+        // Случайный пузырёк
+        if (step % 8 === 5) tone(900 + Math.random() * 600, 'sine', 0.12, 0.03, 0, 1800);
+        step++;
+      };
+      tick();
+      _musicId = setInterval(tick, MS);
     },
 
     stopAll() {
